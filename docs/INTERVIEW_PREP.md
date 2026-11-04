@@ -95,9 +95,13 @@ at the wrong time. Each changes what the rep has to do, which is why each has it
 The sensitive-news rule went through three versions. The second was beaten by a live run: Canva had announced a
 1,200-person restructuring the day before; the system correctly refused to use it as a hook, but didn't soften the
 tone because a person-level item scored higher. It was still the headline company news. Now "headline company news"
-counts. Another: a newsletter footer ("You are now subscribed") tripped the injection detector — narrowed the
-pattern. Another: a UK company-registry page carried a date of birth into the identity sources — that site is now
-excluded and dates of birth are redacted everywhere.
+counts — and a later live run on Canva's CFO showed a June funding story outranking the same layoff, so now any
+sensitive news under 30 days old always triggers the careful route. Others: a newsletter footer ("You are now
+subscribed") tripped the injection detector — narrowed the pattern; a UK company-registry page and a Wikipedia
+"early life" section carried birth details — registries are excluded and birth details are redacted before anything
+is stored; Gemini's free tier turned out to allow 20 requests per day per Flash model — added a per-tier model
+fallback chain; two different former-Deloitte "Michael Browns" were being treated as one person who'd moved —
+namesakes are now checked before "has this person moved?".
 
 **How is it protected against prompt injection?**
 Detector quarantines pages with instructions aimed at an AI; all web text is fenced and escaped so it can't break out
@@ -126,8 +130,17 @@ Specificity and relevance are what make a message worth reading, so they carry m
 3-month-old interview beats yesterday's generic press release; credibility is a tie-breaker. They're hand-set — with
 real data I'd fit them to reply rates.
 
+**Does it actually work? What did you measure?**
+On the deployed app, with live search and the live model: 8 of 8 scenarios took their designed route, 8 of 8 flagged
+the intended edge case, 0 unsupported claims remained across 19 factual claims in 6 drafts, 0 drafts were left
+generic (2 were regenerated once by the genericness loop), 0 runs failed. Median run ~99 s on free tiers. Each of
+those runs was recorded and replays offline to the identical route in the test suite. Details: `docs/EVAL_RESULTS.md`.
+
 ## 4. Known weaknesses (say them before they're found)
 
+- Sensitive tagging depends on the classifier: in one live run a "city ponders lawsuit against fire-truck makers"
+  item wasn't tagged (it wasn't the hook, so no harm — but the safety net is only as good as that judgement).
+- Runs take 1–3 minutes on free tiers (call spacing, fallbacks, regenerations).
 - Thin person-level signal without LinkedIn (by design).
 - Quote matching can reject a correct paraphrase (errs toward removing claims).
 - Thresholds tuned on a small set; no learning from rep edits yet.

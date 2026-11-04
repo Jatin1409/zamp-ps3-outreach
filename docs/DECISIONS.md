@@ -76,7 +76,12 @@ Rep-pasted posts are the sanctioned way to use LinkedIn content.
 
 ### D10. Professional information only
 The filter stage drops items whose main content is personal (family, health, home, religion, politics); the prompts
-forbid using such details; "personal_event" is treated as sensitive.
+forbid using such details; "personal_event" is treated as sensitive. Two gaps found in live runs and closed:
+a UK company-registry officer page carried a date of birth into the identity sources (registries and people-search
+sites are now excluded at the search layer), and a Wikipedia "Early life" section carried a birth date and birthplace
+into the stored raw search results (birth details are now redacted **before** any search result is stored or shown,
+existing rows are redacted on boot, and the recorded fixtures were scrubbed). Earlier git history of one fixture
+file still contains that public Wikipedia sentence.
 
 ### D11. Prompt-injection defence in depth
 1. Pattern detector quarantines sources containing instructions aimed at an AI (stored and shown, never sent to the
