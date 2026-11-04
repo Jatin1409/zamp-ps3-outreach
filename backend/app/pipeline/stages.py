@@ -19,19 +19,13 @@ from .lint import lint_draft
 from .llm_schemas import ClaimBatch, DraftOut, FilterBatch, GenericnessOut, IdentityExtraction, RankBatch
 from .routing import (DO_NOT_DRAFT, CandidateView, RouteDecision, SignalView, decide_identity, decide_route)
 from .scoring import STALE_DAYS, age_days, domain_of, explain_ranking, score_signal
-from .textmatch import normalize, quote_in_text
+from .textmatch import normalize, quote_in_text, redact_personal
 
 EXCLUDED_DOMAINS = ["linkedin.com", "zoominfo.com", "rocketreach.co", "signalhire.com", "apollo.io", "lusha.com",
                     "contactout.com", "spokeo.com", "whitepages.com", "peoplefinders.com",
                     # registries / people pages that publish dates of birth and home addresses
                     "find-and-update.company-information.service.gov.uk", "opencorporates.com",
                     "beenverified.com", "radaris.com", "truepeoplesearch.com", "fastpeoplesearch.com"]
-_DOB = re.compile(r"\b(date of birth|born on|d\.o\.b\.?|dob)\s*[:\-]?\s*[^\n.;|]{0,40}", re.IGNORECASE)
-
-
-def redact_personal(text: str) -> str:
-    """Belt and braces: strip date-of-birth fragments from any stored or prompted text."""
-    return _DOB.sub("[personal detail removed]", text or "")
 MAX_TEXT = 20000
 
 

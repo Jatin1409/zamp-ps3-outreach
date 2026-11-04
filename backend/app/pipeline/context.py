@@ -12,7 +12,7 @@ from ..db import session, utcnow
 from ..models import Event, LLMCall, Run, SearchRecord, Stage
 from ..providers.llm import LLMError, LLMProvider, LLMResult
 from ..providers.search import SearchError, SearchProvider, SearchQuery, SearchResult
-from .textmatch import normalize
+from .textmatch import normalize, redact_personal
 
 STAGES: list[tuple[str, str]] = [
     ("identity", "Resolve identity"),
@@ -192,6 +192,10 @@ class RunContext:
             results = await self.search.search(q)
         except SearchError as e:
             raise StageFailed(f"Web search failed ({e.kind}): {e}", kind=f"search_{e.kind}") from e
+        for r in results:  # never store or pass on birth dates / birthplaces, even from public pages
+            r.content = redact_personal(r.content)
+            if r.raw_content:
+                r.raw_content = redact_personal(r.raw_content)
         live = self.mode == "live"
         async with session() as s:
             s.add(SearchRecord(run_id=self.run_id, prospect_key=self.prospect_key, query=q.query,

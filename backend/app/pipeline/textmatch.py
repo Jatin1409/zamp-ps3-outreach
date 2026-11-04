@@ -36,6 +36,14 @@ def quote_in_text(quote: str | None, text: str | None, threshold: float = 90.0) 
     return score >= threshold, float(score)
 
 
+_DOB = re.compile(r"\b(date of birth|born on|born in|d\.o\.b\.?|dob)\s*[:\-]?\s*[^\n.;|]{0,60}", re.IGNORECASE)
+
+
+def redact_personal(text: str | None) -> str:
+    """Strip date-of-birth / birthplace fragments. Applied to raw search results before they are stored."""
+    return _DOB.sub("[personal detail removed]", text or "")
+
+
 def word_count(text: str) -> int:
     return len(re.findall(r"\b[\w'’-]+\b", text or ""))
 

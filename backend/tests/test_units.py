@@ -277,3 +277,9 @@ def test_identity_two_former_namesakes_is_ambiguous_not_conflict():
     d = R.decide_identity([cand("c1", at="former", company="Dowling & Yahnke", r="Advisor", src=1),
                            cand("c2", at="former", company="", r="Former VP and CFO", src=1)], True, False)
     assert d.status == "ambiguous" and set(d.candidates) == {"c1", "c2"}
+
+
+def test_birth_details_redacted():
+    from app.pipeline.textmatch import redact_personal
+    t = redact_personal("Early life\nBrown was born on November 8, 1954, in Guymon, Oklahoma, and studied finance.")
+    assert "1954" not in t and "Guymon" not in t

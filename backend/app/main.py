@@ -13,7 +13,7 @@ from .api import router
 from .config import get_settings
 from .db import create_all, init_engine
 from .jobs import recover_interrupted, worker_loop
-from .seed import ensure_seed
+from .seed import ensure_seed, redact_stored_personal_details
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -29,6 +29,7 @@ async def lifespan(app: FastAPI):
     init_engine()
     await create_all()
     await ensure_seed()
+    await redact_stored_personal_details()
     await recover_interrupted()
     stop = asyncio.Event()
     task = asyncio.create_task(worker_loop(stop)) if get_settings().worker_enabled else None

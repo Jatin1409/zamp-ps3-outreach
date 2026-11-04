@@ -40,6 +40,36 @@ async def ensure_seed():
             await s.commit()
 
 
+async def redact_stored_personal_details():
+    """Idempotent boot-time hygiene: apply the current redaction rules to evidence stored by older versions."""
+    import logging
+
+    from .models import SearchRecord, Signal
+    from .pipeline.textmatch import redact_personal
+
+    n = 0
+    async with session() as s:
+        for rec in (await s.execute(select(SearchRecord))).scalars():
+            rows, changed = [], False
+            for r in rec.results or []:
+                r = dict(r)
+                for k in ("content", "raw_content"):
+                    if r.get(k):
+                        new = redact_personal(r[k])
+                        changed |= new != r[k]
+                        r[k] = new
+                rows.append(r)
+            if changed:
+                rec.results, n = rows, n + 1
+        for sig in (await s.execute(select(Signal))).scalars():
+            new = redact_personal(sig.text)
+            if new != sig.text:
+                sig.text, n = new, n + 1
+        await s.commit()
+    if n:
+        logging.getLogger("seed").info("redacted personal details in %d stored rows", n)
+
+
 async def get_seller_profile() -> SellerProfile:
     await ensure_seed()
     async with session() as s:
