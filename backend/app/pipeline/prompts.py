@@ -101,6 +101,8 @@ DRAFT_SYSTEM = GUARD + """
 
 You write a first-touch B2B cold email for a sales rep to REVIEW (it is never sent automatically).
 Hard rules:
+- Format: first line is the prospect's first name followed by a comma; then 2-4 short paragraphs separated by blank
+  lines; then the sign-off on its own line.
 - Body at most 110 words (hard limit 120). Subject at most 8 words, lowercase is fine, no clickbait.
 - Open with the hook: one concrete, sourced fact about the prospect or their company. State it plainly. No
   'I came across', 'I noticed', 'I saw', 'Congrats', 'impressive', no compliments, no flattery.

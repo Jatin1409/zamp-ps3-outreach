@@ -223,7 +223,8 @@ table.runs tr.clickable:hover td { background: var(--surface); }
 .meta-strip { display: flex; gap: var(--space-6); flex-wrap: wrap; }
 .meta-strip > div { display: flex; flex-direction: column; }
 .meta-strip .v { font-family: var(--font-mono); font-size: 15px; }
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--hairline); margin-bottom: var(--space-4); overflow-x: auto; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--hairline); margin-bottom: var(--space-4); overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
 .tabs button { border: 0; background: transparent; padding: 10px 14px; cursor: pointer; color: var(--ink-muted); font-weight: 500;
   border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
 .tabs button.on { color: var(--ink); border-bottom-color: var(--ink); }

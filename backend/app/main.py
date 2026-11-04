@@ -20,6 +20,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import os
+
+    if os.environ.get("LOOP_WATCHDOG") == "1":
+        from .watchdog import start
+
+        start(asyncio.get_running_loop())
     init_engine()
     await create_all()
     await ensure_seed()

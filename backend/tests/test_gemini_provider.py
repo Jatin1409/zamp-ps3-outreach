@@ -123,3 +123,40 @@ def test_missing_key(monkeypatch):
     get_settings.cache_clear()
     with pytest.raises(LLMError):
         G.GeminiLLM()
+
+
+def quota_err(daily=True, delay="3600s"):
+    qid = "GenerateRequestsPerDayPerProjectPerModel-FreeTier" if daily else "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"
+    return errors.ClientError(429, {"error": {"code": 429, "message": "quota", "status": "RESOURCE_EXHAUSTED",
+                                              "details": [{"violations": [{"quotaId": qid, "quotaValue": "20"}]},
+                                                          {"retryDelay": delay}]}})
+
+
+async def test_daily_quota_falls_back_to_next_model_without_waiting(monkeypatch):
+    G._exhausted_until.clear()
+    llm, fm = make(monkeypatch, [quota_err(), resp(OK)])
+    r = await llm.complete(purpose="draft", system="s", user="u", schema=FilterBatch, tier="draft")
+    assert [c["model"] for c in fm.calls] == ["gemini-3.6-flash", "gemini-3.8-flash"]
+    assert r.model == "gemini-3.8-flash" and "daily quota" in r.fallback_from[0]
+    # remembered: the next call skips the exhausted model entirely
+    fm.items.append(resp(OK))
+    await llm.complete(purpose="draft", system="s", user="u", schema=FilterBatch, tier="draft")
+    assert fm.calls[-1]["model"] == "gemini-3.8-flash"
+    G._exhausted_until.clear()
+
+
+async def test_overloaded_model_falls_back(monkeypatch):
+    G._exhausted_until.clear()
+    e503 = errors.ServerError(503, {"error": {"code": 503, "message": "overloaded", "status": "UNAVAILABLE"}})
+    llm, fm = make(monkeypatch, [e503, resp(OK)])
+    r = await llm.complete(purpose="filter", system="s", user="u", schema=FilterBatch, tier="fast")
+    assert r.model == "gemini-3.1-flash-lite"
+
+
+async def test_all_models_exhausted_fails_clearly(monkeypatch):
+    G._exhausted_until.clear()
+    llm, _ = make(monkeypatch, [quota_err()] * 5)
+    with pytest.raises(LLMError) as ex:
+        await llm.complete(purpose="draft", system="s", user="u", schema=FilterBatch, tier="draft")
+    assert ex.value.kind == "rate_limited" and "every configured model" in str(ex.value)
+    G._exhausted_until.clear()

@@ -63,6 +63,7 @@ class StageHandle:
     def __init__(self, ctx: "RunContext", row_id: int, key: str):
         self.ctx, self.row_id, self.key = ctx, row_id, key
         self.output: dict[str, Any] = {}
+        self.meta: dict[str, Any] = {}  # provider metadata, merged into output when the stage finishes
         self.explanation: str = ""
         self.status = "succeeded"
         self.tokens_in = self.tokens_out = 0
@@ -114,6 +115,7 @@ class RunContext:
                       extra: dict | None = None):
         ms = int((time.monotonic() - t0) * 1000)
         out = dict(h.output)
+        out.update(h.meta)
         if extra:
             out.update(extra)
         async with session() as s:
@@ -162,6 +164,14 @@ class RunContext:
                 await s.commit()
             raise StageFailed(f"Language model call failed ({e.kind}): {e}", kind=f"llm_{e.kind}") from e
         cost = llm_cost(res.model, res.input_tokens, res.output_tokens)
+        h.meta.setdefault("models_used", [])
+        if res.model not in h.meta["models_used"]:
+            h.meta["models_used"].append(res.model)
+        skipped = getattr(res, "fallback_from", None)
+        if skipped:
+            h.meta.setdefault("model_fallbacks", []).append({"purpose": purpose, "skipped": skipped,
+                                                                "used": res.model})
+            await h.progress(f"Primary model unavailable ({'; '.join(skipped)}) - used {res.model}")
         h.tokens_in += res.input_tokens
         h.tokens_out += res.output_tokens
         h.cost += cost

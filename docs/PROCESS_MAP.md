@@ -75,7 +75,7 @@ cost. Every status change is written to an event log that the UI streams over Se
 |---|---|---|---|
 | R1 | Rep chose *stop* at an identity gate | **do_not_draft** (stopped by rep) | — |
 | R2 | No eligible signal scores ≥ 0.30 | **do_not_draft** — explain what is missing | none |
-| R3 | The top sensitive item about the person/company is "the strongest news" (within 0.10 of the best safe hook, **or** it outranks every safe company-level item) **and unavoidable** (≤ 30 days old, or ≤ 90 days and specific to the person/team) | **draft_with_warning** — best safe hook, sensitive tone, rep acknowledgement required | person/company |
+| R3 | A sensitive item about the person/company is **≤ 30 days old** (always — it's the context they're living in), **or** it is "the strongest news" (within 0.10 of the best safe hook, or outranks every safe company-level item) **and** ≤ 90 days old and specific to the person/team | **draft_with_warning** — best safe hook, sensitive tone, rep acknowledgement required | person/company |
 | R4 | Same, but avoidable (older or less specific) and a safe alternative ≥ 0.30 exists | **draft** with the safe alternative; note the avoided signal | from alternative |
 | R5 | Best eligible signal is company-level only (no person-level signal ≥ 0.40) | **draft_with_warning** — "lower personalisation" | company |
 | R6 | Identity confidence low (not found, or rep continued on original details despite conflict) | **draft_with_warning** | as found |

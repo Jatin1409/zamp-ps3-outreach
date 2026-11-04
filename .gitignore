@@ -12,3 +12,4 @@ backend/static/
 backend/dev_ui.env
 *.db-shm
 *.db-wal
+backend/diag.env

@@ -125,11 +125,22 @@ async def stage_identity(ctx: RunContext, run: Run) -> dict:
                                "published": src.get("published") if src else None, "verified": ok})
             name_ok = fuzz.token_set_ratio(normalize(c.full_name), normalize(p["name"])) >= 85
             cid = f"c{i + 1}"
-            views.append(CandidateView(cid, c.full_name, c.current_company, c.current_role, c.at_input_company,
+            at_input, note = c.at_input_company, None
+            company_ok = not c.current_company or fuzz.token_set_ratio(
+                normalize(c.current_company), normalize(p["company"])) >= 80
+            if at_input == "current" and not company_ok:
+                # model output contradicts itself ("current at X" but current_company = Y): trust neither
+                at_input = "unclear"
+                note = (f"Sources were read as both 'currently at {p['company']}' and 'currently at "
+                        f"{c.current_company}' - treated as unclear.")
+            views.append(CandidateView(cid, c.full_name, c.current_company, c.current_role, at_input,
                                        c.role_matches_input, len(verified_urls), name_ok))
-            cand_out.append({"id": cid, **c.model_dump(exclude={"evidence"}), "evidence": ev_out,
-                             "verified_sources": len(verified_urls), "name_matches": name_ok})
+            cand_out.append({"id": cid, **c.model_dump(exclude={"evidence"}), "at_input_company": at_input,
+                             "evidence": ev_out, "verified_sources": len(verified_urls), "name_matches": name_ok,
+                             "consistency_note": note})
         dec = decide_identity(views, bool(p.get("role")), ext.conflicting_sources)
+        dec.reasons.extend(c["consistency_note"] for c in cand_out
+                           if c["consistency_note"] and c["id"] == dec.chosen)
         identity = {**asdict(dec), "candidate_details": cand_out, "summary": ext.summary,
                     "searched": [q.query for q in queries]}
         h.output.update({"decision": asdict(dec), "candidates": cand_out})

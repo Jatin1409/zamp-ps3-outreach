@@ -40,7 +40,12 @@ not as "edge-case routes".
   integration test a 7-day-old layoff lost to an interview by 0.06 and went through as a normal draft. v2 added the
   0.10 margin; then a **live run** (Sarah Riley → Canva, 2026-11-05) found Canva had announced a 1,200-person
   restructuring the day before. It was correctly excluded as a hook but, at 0.17 below a person-level hook, didn't
-  trigger tone handling — though it was the top Canva news item. v3 (current) catches that case.
+  trigger tone handling — though it was the top Canva news item. v3 added "outranks every safe company item".
+  Then a live run on Canva's CFO showed a June funding story (0.76) outranking the same 1-day-old layoff (0.53):
+  the ranking measures relevance to the seller, not newsworthiness. v4 (current): **any sensitive item about the
+  person/company ≤ 30 days old always triggers R3**; older ones use the dominance test.
+- **Tradeoff:** a small, fresh negative item (e.g. a minor lawsuit filed last week) also forces acknowledgement.
+  Acceptable: it costs one tick, and the rep sees exactly which item triggered it.
 - **Tradeoff:** more drafts require acknowledgement; occasionally for news the rep would consider minor.
 
 ### D5. Ask the rep rather than guess on identity

@@ -39,6 +39,28 @@ def inline_schema(schema: dict) -> dict:
     return walk(schema)
 
 
+_exhausted_until: dict[str, float] = {}
+
+
+def _exhausted(model: str) -> bool:
+    return _exhausted_until.get(model, 0) > time.monotonic()
+
+
+def _mark_exhausted(model: str, seconds: float):
+    _exhausted_until[model] = time.monotonic() + min(seconds, 86400)
+
+
+def _is_daily_quota(err) -> bool:
+    try:
+        for d in (err.details or {}).get("error", {}).get("details", []):
+            for v in d.get("violations", []) or []:
+                if "PerDay" in str(v.get("quotaId", "")):
+                    return True
+    except (AttributeError, TypeError):
+        pass
+    return "PerDay" in str(err)
+
+
 def _retry_delay(err) -> float | None:
     """Gemini 429s carry a RetryInfo detail like '27s'."""
     try:
@@ -73,9 +95,17 @@ class GeminiLLM:
                 await asyncio.sleep(wait)
             _last_call = time.monotonic()
 
+    def chain(self, tier: str) -> list[str]:
+        s = self.s
+        primary = s.gemini_model_fast if tier == "fast" else s.gemini_model
+        extra = s.gemini_fast_fallbacks if tier == "fast" else s.gemini_fallbacks
+        out = [primary] + [m.strip() for m in extra.split(",") if m.strip()]
+        return list(dict.fromkeys(out))
+
     async def complete(self, *, purpose, system, user, schema, tier="fast", max_tokens=8000) -> LLMResult:
         s, types, errors = self.s, self.types, self.errors
-        model = s.gemini_model_fast if tier == "fast" else s.gemini_model
+        models = [m for m in self.chain(tier) if not _exhausted(m)] or self.chain(tier)[-1:]
+        mi = 0
         level = s.llm_effort_fast if tier == "fast" else s.llm_effort_draft
         json_schema = inline_schema(schema.model_json_schema())
         prompt = user
@@ -84,7 +114,9 @@ class GeminiLLM:
         last = ""
         schema_tries = 0
         transient_tries = 0
+        skipped: list[str] = []
         while True:
+            model = models[mi]
             cfg = types.GenerateContentConfig(
                 system_instruction=system, max_output_tokens=max(max_tokens, 4096),
                 response_mime_type="application/json", response_json_schema=json_schema,
@@ -96,15 +128,24 @@ class GeminiLLM:
                 code = getattr(e, "code", None)
                 if code in (401, 403):
                     raise LLMError("Gemini rejected the API key (check GEMINI_API_KEY)", kind="config") from e
+                daily = code == 429 and _is_daily_quota(e)
+                if daily:
+                    _mark_exhausted(model, _retry_delay(e) or 3600)
+                if (daily or code in (404, 503)) and mi + 1 < len(models):
+                    skipped.append(f"{model} ({'daily quota used up' if daily else code})")
+                    mi += 1
+                    transient_tries = 0
+                    continue
                 if code == 404:
                     raise LLMError(f"Gemini model '{model}' not found", kind="config") from e
-                if code in (429, 500, 502, 503, 504) and transient_tries < s.gemini_max_retries:
+                if not daily and code in (429, 500, 502, 503, 504) and transient_tries < s.gemini_max_retries:
                     transient_tries += 1
                     delay = _retry_delay(e) if code == 429 else None
                     await asyncio.sleep(min(60.0, delay or (2 ** transient_tries * 2)) + random.random())
                     continue
                 kind = "rate_limited" if code == 429 else "provider_error"
-                raise LLMError(f"Gemini API error {code}: {str(e)[:300]}", kind=kind) from e
+                msg = "daily free-tier quota used up for every configured model" if daily else str(e)[:300]
+                raise LLMError(f"Gemini API error {code}: {msg}", kind=kind) from e
             except (asyncio.TimeoutError, TimeoutError) as e:
                 if transient_tries < s.gemini_max_retries:
                     transient_tries += 1
@@ -142,6 +183,8 @@ class GeminiLLM:
                 prompt = (user + "\n\nYour previous answer failed validation: " + last
                           + "\nReturn JSON that matches the schema exactly.")
                 continue
-            return LLMResult(data=data, model=model, input_tokens=tin, output_tokens=tout,
-                             latency_ms=int((time.monotonic() - t0) * 1000), attempts=schema_tries + 1,
-                             raw=data.model_dump(mode="json"))
+            res = LLMResult(data=data, model=model, input_tokens=tin, output_tokens=tout,
+                            latency_ms=int((time.monotonic() - t0) * 1000), attempts=schema_tries + 1,
+                            raw=data.model_dump(mode="json"))
+            res.fallback_from = skipped  # type: ignore[attr-defined]
+            return res

@@ -4,14 +4,48 @@
     {
       "name": "dev-ui",
       "runtimeExecutable": "D:/Zamp - Jatin Jain/.venv/Scripts/python.exe",
-      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "D:/Zamp - Jatin Jain/backend", "--env-file", "D:/Zamp - Jatin Jain/backend/dev_ui.env", "--port", "8000"],
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--app-dir",
+        "D:/Zamp - Jatin Jain/backend",
+        "--env-file",
+        "D:/Zamp - Jatin Jain/backend/dev_ui.env",
+        "--port",
+        "8000"
+      ],
       "port": 8000
     },
     {
       "name": "app",
       "runtimeExecutable": "D:/Zamp - Jatin Jain/.venv/Scripts/python.exe",
-      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "D:/Zamp - Jatin Jain/backend", "--port", "8001"],
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--app-dir",
+        "D:/Zamp - Jatin Jain/backend",
+        "--port",
+        "8001"
+      ],
       "port": 8001
+    },
+    {
+      "name": "diag",
+      "runtimeExecutable": "D:/Zamp - Jatin Jain/.venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--app-dir",
+        "D:/Zamp - Jatin Jain/backend",
+        "--env-file",
+        "D:/Zamp - Jatin Jain/backend/diag.env",
+        "--port",
+        "8002"
+      ],
+      "port": 8002
     }
   ]
 }

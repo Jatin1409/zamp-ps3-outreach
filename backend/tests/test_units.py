@@ -263,3 +263,10 @@ def test_personal_redaction_and_registry_blocked():
     assert "Acme raised $40M" in redact_personal("Acme raised $40M")
     assert blocked("https://find-and-update.company-information.service.gov.uk/officers/x/appointments")
     assert blocked("https://www.linkedin.com/in/someone") and not blocked("https://www.reuters.com/x")
+
+
+def test_route_fresh_layoff_triggers_even_when_outscored():
+    # Real case (Canva CFO, 2026-11-05): June funding story 0.76 beat a 1-day-old 1,200-person layoff 0.53.
+    d = R.decide_route([sig("s7", 0.76, "company"), sig("s6", 0.71, "person"),
+                        sig("s16", 0.53, "company", eligible=False, sens="layoff", age=1, spec=1)], "medium")
+    assert (d.route, d.rule, d.sensitive_mode, d.sensitive_signal) == ("draft_with_warning", "R3", "acknowledge", "s16")

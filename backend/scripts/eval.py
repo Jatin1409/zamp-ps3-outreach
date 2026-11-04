@@ -26,7 +26,11 @@ from app.scenarios import SCENARIOS  # noqa: E402
 def wait(c: httpx.Client, rid: str, until: tuple[str, ...], timeout: float = 400) -> dict:
     t0 = time.time()
     while time.time() - t0 < timeout:
-        d = c.get(f"/api/runs/{rid}").json()
+        try:
+            d = c.get(f"/api/runs/{rid}").json()
+        except httpx.TransportError:   # slow poll on a small free instance: just try again
+            time.sleep(3)
+            continue
         if d["status"] in until:
             return d
         time.sleep(2)
@@ -123,7 +127,7 @@ def main():
     a = ap.parse_args()
     only = set(filter(None, a.only.split(",")))
     rows = []
-    with httpx.Client(base_url=a.base.rstrip("/"), headers={"X-Access-Code": a.code}, timeout=60) as c:
+    with httpx.Client(base_url=a.base.rstrip("/"), headers={"X-Access-Code": a.code}, timeout=120) as c:
         for sc in SCENARIOS:
             if only and sc["key"] not in only:
                 continue

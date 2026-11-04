@@ -4,7 +4,7 @@ export const fmtMs = (ms?: number | null) => {
   const s = ms / 1000;
   return s < 60 ? `${s.toFixed(1)} s` : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
 };
-export const fmtCost = (c?: number | null) => (c == null ? "—" : c < 0.01 ? `$${c.toFixed(4)}` : `$${c.toFixed(3)}`);
+export const fmtCost = (c?: number | null) => (c == null ? "—" : c === 0 ? "$0.00" : c < 0.01 ? `$${c.toFixed(4)}` : `$${c.toFixed(3)}`);
 export const fmtNum = (n?: number | null) => (n == null ? "—" : n.toLocaleString());
 export const fmtPct = (n?: number | null) => (n == null ? "—" : `${Math.round(n * 100)}%`);
 export const fmtDate = (s?: string | null) => {

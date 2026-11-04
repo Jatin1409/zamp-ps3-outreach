@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     gemini_model_fast: str = "gemini-3.5-flash-lite"  # classification / scoring (stable)
     llm_min_interval_s: float = 1.0          # space calls out to respect free-tier per-minute quotas
     gemini_max_retries: int = 4
+    # Free-tier quotas are per model per day (gemini-3.6-flash: 20 requests/day, observed 2026-11-05), so each tier
+    # falls back down an ordered chain when a model's daily quota is used up or it is overloaded.
+    gemini_fallbacks: str = "gemini-3.8-flash,gemini-3.5-flash-lite"
+    gemini_fast_fallbacks: str = "gemini-3.1-flash-lite"
     search_cost_per_call_usd: float = 0.0  # Tavily free tier = $0; pay-as-you-go list price is $0.008
     search_provider: str = "tavily"          # tavily | fixture
     llm_model: str = "claude-opus-5-5"       # drafting / verification

@@ -23,7 +23,7 @@ function Gate({ onOk }: { onOk: () => void }) {
       <form className="card stack" onSubmit={submit}>
         <div className="row"><div className="brand-mark"><Lock size={14} /></div><span className="eyebrow">Outreach Desk</span></div>
         <h2>Enter the access code</h2>
-        <p className="muted small">This demo runs real web searches and AI calls that cost money, so it is protected.
+        <p className="muted small">This demo runs real web searches and AI calls on limited quotas, so it is protected.
           The code was shared with you alongside the link.</p>
         <input className="input" autoFocus value={code} onChange={(e) => setC(e.target.value)} placeholder="Access code" aria-label="Access code" />
         {err && <div className="callout bad small">{err}</div>}

@@ -159,7 +159,13 @@ def decide_route(signals: list[SignalView], identity_confidence: str, rep_stoppe
     # or (b) it outranks every safe item about the company - i.e. it is the headline company news right now.
     best_company = next((s for s in eligible if s.about == "company"), None)
     top = None
-    if sens:
+    fresh = [s for s in sens if s.age_days is not None and s.age_days <= SENSITIVE_FRESH_DAYS]
+    if fresh:
+        # A sensitive event in the last 30 days is the context the prospect is living in right now, whatever it
+        # scores for relevance to the seller (seen live: a 1-day-old 1,200-person layoff ranked below a June
+        # funding story). It always triggers sensitive handling.
+        top = fresh[0]
+    elif sens:
         cand = sens[0]
         if cand.total >= best.total - SENSITIVE_DOMINANCE_MARGIN or \
                 (cand.about == "company" and (best_company is None or cand.total > best_company.total)):

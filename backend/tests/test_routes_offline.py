@@ -313,3 +313,12 @@ async def test_dashboard_filters(client, base):
     assert lst["total"] == 2
     m = (await client.get("/api/metrics", headers=H)).json()
     assert m["runs"] == 2 and m["edge_cases"]["ambiguous_identity"] == 1
+
+
+async def test_self_contradicting_identity_downgraded(client, base):
+    # Seen live: model said "current at OakNorth" but current_company = previous employer.
+    fx = copy.deepcopy(base)
+    fx["llm"]["identity"][0]["candidates"][0]["current_company"] = "Virgin Money"
+    rid, d = await run(client, fx)
+    assert d["identity"]["status"] == "resolved" and d["identity"]["confidence"] == "medium"
+    assert any("treated as unclear" in r for r in d["identity"]["reasons"])
