@@ -159,3 +159,16 @@ edge cases — sensitive 3, thin 2, outdated 1, ambiguous 1.
   than clever. This is the free Flash-tier model; quality would be re-measured on a paid model.
 - **Durations of 1–3 minutes** on the free tier (call spacing, retries, fallbacks, one regeneration for
   genericness in 2 of 6 drafts).
+
+## Not exercised against live services (covered by offline tests only)
+
+- **Claim rewrite loop** (stage 7): every live draft verified on the first pass (0 rewrites in 6 drafts). The
+  rewrite → re-verify → warn path is covered by `test_unsupported_claim_rewritten` and
+  `test_unsupported_claim_survives_two_rewrites_warns`.
+- **Rule R4** (sensitive item avoided because it is older and avoidable) and **rule R6** (rep keeps original details
+  after a role conflict / low identity confidence): unit + integration tests only.
+- **"Retry in replay mode" after a live search outage**: replay mode itself was run live; the retry-after-outage
+  flow is covered by `test_search_outage_fails_visibly_then_replay_recovers` (simulated outage).
+- **Browser walkthrough of the deployed site past the access-code screen**: the deployed site was checked from a fresh
+  session up to the access-code screen and every deployed API path above was exercised directly; the full UI was
+  checked on real data on a local instance. A human click-through of the deployed UI is still to do.
