@@ -1,0 +1,53 @@
+{
+  "_note": "Hand-written offline fixture (fictional company) used to develop the pipeline before live keys existed. Recorded live fixtures live alongside it.",
+  "today": "2026-11-01",
+  "search": {
+    "*": [
+      {"title": "Northwind Freight raises $40M Series C to expand into Mexico", "url": "https://techcrunch.com/2026/10/12/northwind-freight-series-c/", "content": "Northwind Freight, the Chicago-based freight brokerage, raised a $40 million Series C to open three new entities in Mexico.", "raw_content": "Northwind Freight, the Chicago-based freight brokerage, raised a $40 million Series C to open three new entities in Mexico. The company says it now works with more than 4,000 carriers.", "published_date": "2026-10-12", "score": 0.9},
+      {"title": "Dana Whitfield on scaling finance at Northwind Freight", "url": "https://www.cfodive.com/news/dana-whitfield-northwind-freight-finance/", "content": "Dana Whitfield, CFO of Northwind Freight, says the finance team is processing three times the invoices it did last year.", "raw_content": "Dana Whitfield, CFO of Northwind Freight, says the finance team is processing three times the invoices it did last year. \"We're processing three times the invoices we did last year with the same team,\" Whitfield said. She joined Northwind Freight as CFO in 2024.", "published_date": "2026-09-28", "score": 0.85},
+      {"title": "Northwind Traders sample database", "url": "https://learn.example.com/northwind-traders", "content": "Northwind Traders is a sample database for learning SQL.", "raw_content": "Northwind Traders is a sample database for learning SQL.", "published_date": null, "score": 0.2}
+    ]
+  },
+  "llm": {
+    "identity": [{
+      "candidates": [{
+        "full_name": "Dana Whitfield", "current_company": "Northwind Freight", "current_role": "CFO",
+        "at_input_company": "current", "role_matches_input": "yes", "distinguisher": "CFO since 2024, Chicago",
+        "evidence": [
+          {"source": 1, "quote": "Dana Whitfield, CFO of Northwind Freight, says the finance team is processing three times the invoices it did last year."},
+          {"source": 0, "quote": "She joined Northwind Freight as CFO in 2024."}
+        ]
+      }],
+      "conflicting_sources": false, "summary": "One clear match."
+    }],
+    "filter": [{"judgments": [
+      {"sid": "s1", "about": "company", "signal_type": "funding", "sensitive_category": "none", "contains_personal_details": false, "reason": "Funding round for the prospect's company."},
+      {"sid": "s2", "about": "person", "signal_type": "interview", "sensitive_category": "none", "contains_personal_details": false, "reason": "Interview with the prospect."},
+      {"sid": "s3", "about": "other_company", "signal_type": "other", "sensitive_category": "none", "contains_personal_details": false, "reason": "A sample database, unrelated."}
+    ]}],
+    "rank": [{"judgments": [
+      {"sid": "s1", "specificity": 1, "relevance": 3, "key_fact": "raised a $40 million Series C to open three new entities in Mexico", "seller_problem": "Adding new entities, currencies or ERPs without adding AP headcount", "why": "New entities mean new AP complexity."},
+      {"sid": "s2", "specificity": 3, "relevance": 3, "key_fact": "We're processing three times the invoices we did last year with the same team", "seller_problem": "Invoice volume growing faster than the AP team", "why": "Direct statement of the core problem."}
+    ]}],
+    "draft": [{
+      "subject": "3x the invoices, same team",
+      "body": "Dana,\n\nIn your CFO Dive interview you said Northwind is processing three times the invoices it did last year with the same team. With three new Mexican entities on the way after the Series C, that load usually grows again.\n\nLedgerline automates invoice capture and PO matching; customers typically automate 70-80% of invoice matching within 90 days.\n\nWould a one-page teardown of how that would look for a multi-entity setup be useful?\n\nAlex at Ledgerline",
+      "hook_signal_id": "s2", "problem_addressed": "Invoice volume growing faster than the AP team", "ask": "One-page teardown"
+    }],
+    "verify": [{"claims": [
+      {"claim": "Northwind is processing three times the invoices it did last year with the same team", "kind": "prospect_fact", "source_id": "s2", "supporting_quote": "We're processing three times the invoices we did last year with the same team", "entailed": true},
+      {"claim": "Dana gave an interview to CFO Dive", "kind": "prospect_fact", "source_id": "s2", "supporting_quote": "Dana Whitfield, CFO of Northwind Freight, says the finance team is processing three times the invoices it did last year.", "entailed": true},
+      {"claim": "Three new Mexican entities after the Series C", "kind": "company_fact", "source_id": "s1", "supporting_quote": "raised a $40 million Series C to open three new entities in Mexico", "entailed": true},
+      {"claim": "Customers typically automate 70-80% of invoice matching within 90 days", "kind": "seller_fact", "source_id": "seller.proof_points", "supporting_quote": "Customers typically automate 70-80% of invoice matching within 90 days", "entailed": true},
+      {"claim": "That load usually grows again", "kind": "opinion_or_framing", "source_id": "", "supporting_quote": "", "entailed": false},
+      {"claim": "Would a one-page teardown be useful?", "kind": "ask", "source_id": "", "supporting_quote": "", "entailed": false}
+    ]}],
+    "generic": [{
+      "decoys": [
+        {"decoy": "Head of Finance at a 300-person regional logistics company in Ohio with no recent news", "still_makes_sense": false, "why": "Relies on the interview quote and Series C."},
+        {"decoy": "VP Operations at a mid-size Spanish hotel group", "still_makes_sense": false, "why": "Specific to Northwind's entities."}
+      ],
+      "specific_elements": ["three times the invoices", "three new Mexican entities", "Series C"]
+    }]
+  }
+}

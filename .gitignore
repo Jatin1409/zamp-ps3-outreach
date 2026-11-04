@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+*.db
+*.sqlite
+node_modules/
+frontend/dist/
+backend/static/
+.pytest_cache/
+.coverage
+backend/dev_ui.env
