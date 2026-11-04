@@ -101,14 +101,27 @@ stage* and offers "Retry in replay mode" — it never silently falls back.
 Anthropic, Fixture (recorded); Tavily, Replay, Fixture. Swapping a model is an env var (`LLM_MODEL`, `LLM_MODEL_FAST`);
 swapping a vendor is one class.
 
-### D15. Model choice: Claude Opus 5.5 for every stage, effort tuned per tier
-- Classification/scoring calls run at `effort: low`; drafting and verification at `medium`.
-- **Alternatives:** a cheaper model (Haiku 5.5 / Sonnet 5.5) for classification.
-- **Why:** quality of relevance and claim-splitting judgements matters most; per-run cost is cents. The cheaper-model
-  option is one env var (`LLM_MODEL_FAST=claude-haiku-5-5`) if volume grows — not switched by default because that is a
-  cost/quality call for the owner, and it hasn't been evaluated.
-- **Not enabled:** Anthropic's server-side refusal fallback (a beta parameter). A refusal instead fails the stage
-  visibly. For B2B research content refusals are unexpected; enabling it is a small change if they occur.
+### D15. Model choice: Google Gemini free tier (owner's decision), Claude kept as a drop-in alternative
+- **Decision:** `LLM_PROVIDER=gemini`. Drafting and verification use `gemini-3.6-flash` (stable); classification and
+  scoring use `gemini-3.5-flash-lite` (stable). Thinking level `low` for classification, `medium` for drafting and
+  verification. Model IDs, structured-output support and free-tier pricing were checked against Google's docs on
+  2026-11-05.
+- **Alternatives:** Anthropic Claude (built first and still implemented: `LLM_PROVIDER=anthropic`); Claude Haiku for
+  classification at a few cents per run.
+- **Why:** the owner wanted no paid model. Gemini Flash models are free on Google's free tier and support schema-
+  constrained JSON output, which the pipeline relies on.
+- **Tradeoffs, accepted knowingly:**
+  - *Data use:* Google's pricing page says free-tier prompts are "used to improve our products". What gets sent is
+    public web text, rep notes and the fictional seller profile. Reps should not paste confidential CRM notes while on
+    the free tier; the paid tier is not used for training.
+  - *Quotas:* free-tier limits are per project and shown only in AI Studio. Calls are spaced (`LLM_MIN_INTERVAL_S`)
+    and 429s are retried with the server's suggested delay (up to 4 times); exhausting that fails the stage visibly.
+  - *Quality:* expected to be somewhat weaker on subtle judgements than a frontier model; this is measured in
+    `docs/EVAL_RESULTS.md`, not assumed. Deterministic safeguards (quote matching, code routing) do not depend on
+    which model is used.
+  - *Cost display:* LLM cost shows $0.00 because the free tier charges nothing; tokens are still tracked per run.
+- **Implementation:** official `google-genai` SDK, `models.generate_content` with `response_json_schema` (Pydantic
+  schema with `$ref`s inlined), then strict Pydantic validation of the returned text, one repair retry, then failure.
 
 ### D16. Structured outputs via the SDK's `messages.parse` + Pydantic
 Every LLM response is parsed into a strict Pydantic model (`extra="forbid"`), with one automatic repair retry quoting

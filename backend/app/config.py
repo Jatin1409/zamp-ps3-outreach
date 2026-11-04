@@ -14,8 +14,14 @@ class Settings(BaseSettings):
 
     # --- providers -------------------------------------------------------
     anthropic_api_key: str = ""
+    gemini_api_key: str = ""
     tavily_api_key: str = ""
-    llm_provider: str = "anthropic"          # anthropic | fixture
+    llm_provider: str = "gemini"             # gemini | anthropic | fixture
+    gemini_model: str = "gemini-3.6-flash"           # drafting / verification (stable)
+    gemini_model_fast: str = "gemini-3.5-flash-lite"  # classification / scoring (stable)
+    llm_min_interval_s: float = 1.0          # space calls out to respect free-tier per-minute quotas
+    gemini_max_retries: int = 4
+    search_cost_per_call_usd: float = 0.0  # Tavily free tier = $0; pay-as-you-go list price is $0.008
     search_provider: str = "tavily"          # tavily | fixture
     llm_model: str = "claude-opus-5-5"       # drafting / verification
     llm_model_fast: str = "claude-opus-5-5"  # classification / scoring (swap to a cheaper model here)
@@ -66,11 +72,13 @@ PRICES_PER_MTOK: dict[str, tuple[float, float]] = {
     "claude-haiku-5-5": (0.10, 0.50),
     "claude-fable-5-1": (10.00, 50.00),
     "fixture": (0.0, 0.0),
+    # Gemini free tier: no charge (Google may use free-tier prompts to improve its products).
+    "gemini-3.6-flash": (0.0, 0.0),
+    "gemini-3.5-flash-lite": (0.0, 0.0),
+    "gemini-3.8-flash": (0.0, 0.0),
 }
-# Tavily basic search = 1 credit; pay-as-you-go list price is $0.008/credit.
-SEARCH_COST_PER_CALL_USD = 0.008
 
 
 def llm_cost(model: str, input_tokens: int, output_tokens: int) -> float:
-    pin, pout = PRICES_PER_MTOK.get(model, (4.00, 20.00))
+    pin, pout = PRICES_PER_MTOK.get(model, (0.0, 0.0) if model.startswith("gemini") else (4.00, 20.00))
     return round(input_tokens / 1e6 * pin + output_tokens / 1e6 * pout, 6)

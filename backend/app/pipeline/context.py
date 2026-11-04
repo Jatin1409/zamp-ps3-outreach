@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy import func, select, update
 
-from ..config import SEARCH_COST_PER_CALL_USD, llm_cost
+from ..config import get_settings, llm_cost
 from ..db import session, utcnow
 from ..models import Event, LLMCall, Run, SearchRecord, Stage
 from ..providers.llm import LLMError, LLMProvider, LLMResult
@@ -190,8 +190,9 @@ class RunContext:
                                results=[r.to_dict() for r in results], provider=self.search.name))
             run = await s.get(Run, self.run_id)
             run.search_calls += 1
-            if live and self.search.name == "tavily":
-                run.cost_usd = round(run.cost_usd + SEARCH_COST_PER_CALL_USD, 6)
-                h.cost += SEARCH_COST_PER_CALL_USD
+            per_call = get_settings().search_cost_per_call_usd
+            if live and self.search.name == "tavily" and per_call:
+                run.cost_usd = round(run.cost_usd + per_call, 6)
+                h.cost += per_call
             await s.commit()
         return results

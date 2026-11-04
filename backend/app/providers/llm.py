@@ -143,6 +143,11 @@ def load_fixture(name: str) -> dict:
 
 
 def make_llm(fixture: dict | None = None) -> LLMProvider:
-    if fixture is not None or get_settings().llm_provider == "fixture":
+    provider = get_settings().llm_provider
+    if fixture is not None or provider == "fixture":
         return FixtureLLM(fixture or {})
+    if provider == "gemini":
+        from .gemini import GeminiLLM
+
+        return GeminiLLM()
     return AnthropicLLM()
