@@ -3,7 +3,7 @@ services:
   - type: web
     name: outreach-desk
     runtime: docker
-    plan: starter            # free plan sleeps after 15 min idle (~50 s cold start) - risky for a live demo
+    plan: free               # chosen by owner; sleeps after 15 min idle (~50 s cold start) - warm it before a demo
     region: oregon
     healthCheckPath: /api/health
     envVars:
@@ -27,5 +27,5 @@ services:
         value: "150"
 databases:
   - name: outreach-desk-db
-    plan: basic-256mb
+    plan: free               # free Postgres expires after 30 days
     region: oregon
