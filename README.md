@@ -113,7 +113,9 @@ Runs every sample scenario live, checks it took its designed route, and writes `
 `render.yaml` is a Blueprint for one Docker web service (API + SSE + built frontend + worker) and one Postgres
 database, both on the free plan. Deploy: push to GitHub → Render → New → Blueprint → pick the repo → fill the secret
 env vars (`GEMINI_API_KEY`, `TAVILY_API_KEY`, `ACCESS_CODE`). The live instance was created through the Render API
-with the same settings. Pushing to `main` redeploys.
+with the same settings, from the public repo URL — so there is no GitHub webhook and pushes do **not** auto-deploy.
+Redeploy with `POST https://api.render.com/v1/services/<service-id>/deploys` (or "Manual Deploy" in the dashboard),
+or connect the GitHub app in Render to get deploy-on-push.
 
 ## Limitations (honest list)
 
