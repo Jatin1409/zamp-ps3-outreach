@@ -22,7 +22,16 @@ from .scoring import STALE_DAYS, age_days, domain_of, explain_ranking, score_sig
 from .textmatch import normalize, quote_in_text
 
 EXCLUDED_DOMAINS = ["linkedin.com", "zoominfo.com", "rocketreach.co", "signalhire.com", "apollo.io", "lusha.com",
-                    "contactout.com", "spokeo.com", "whitepages.com", "peoplefinders.com"]
+                    "contactout.com", "spokeo.com", "whitepages.com", "peoplefinders.com",
+                    # registries / people pages that publish dates of birth and home addresses
+                    "find-and-update.company-information.service.gov.uk", "opencorporates.com",
+                    "beenverified.com", "radaris.com", "truepeoplesearch.com", "fastpeoplesearch.com"]
+_DOB = re.compile(r"\b(date of birth|born on|d\.o\.b\.?|dob)\s*[:\-]?\s*[^\n.;|]{0,40}", re.IGNORECASE)
+
+
+def redact_personal(text: str) -> str:
+    """Belt and braces: strip date-of-birth fragments from any stored or prompted text."""
+    return _DOB.sub("[personal detail removed]", text or "")
 MAX_TEXT = 20000
 
 
@@ -56,11 +65,11 @@ def focus_text(result: SearchResult, terms: list[str], max_chars: int = 2400) ->
         if k not in seen:
             seen.add(k)
             out.append(p)
-    return "\n".join(out)[:max_chars]
+    return redact_personal("\n".join(out)[:max_chars])
 
 
 def full_text(result: SearchResult) -> str:
-    return ((result.content or "") + "\n\n" + (result.raw_content or ""))[:MAX_TEXT]
+    return redact_personal(((result.content or "") + "\n\n" + (result.raw_content or ""))[:MAX_TEXT])
 
 
 def name_terms(name: str) -> list[str]:

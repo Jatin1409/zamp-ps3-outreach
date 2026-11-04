@@ -12,6 +12,7 @@ DO_NOT_DRAFT = "do_not_draft"
 
 SENSITIVE_UNAVOIDABLE_DAYS = 90
 SENSITIVE_DOMINANCE_MARGIN = 0.10
+SENSITIVE_FRESH_DAYS = 30
 
 
 # --------------------------------------------------------------------------- identity gate (decision A)
@@ -153,14 +154,22 @@ def decide_route(signals: list[SignalView], identity_confidence: str, rep_stoppe
 
     best = eligible[0]
     sensitive_mode, sensitive_sid = "none", None
-    sens = [s for s in ranked if s.sensitive_category != "none"]
-    # A sensitive item counts as "the strongest news" if it scores at least as high as the best safe hook
-    # minus a small margin - it is then too prominent to pretend it isn't there.
-    top = sens[0] if sens and sens[0].total >= best.total - SENSITIVE_DOMINANCE_MARGIN else None
+    sens = [s for s in ranked if s.sensitive_category != "none" and s.about in ("person", "company")]
+    # A sensitive item counts as "the strongest news" if (a) it scores within a small margin of the best safe hook,
+    # or (b) it outranks every safe item about the company - i.e. it is the headline company news right now.
+    best_company = next((s for s in eligible if s.about == "company"), None)
+    top = None
+    if sens:
+        cand = sens[0]
+        if cand.total >= best.total - SENSITIVE_DOMINANCE_MARGIN or \
+                (cand.about == "company" and (best_company is None or cand.total > best_company.total)):
+            top = cand
 
     if top is not None:
-        unavoidable = (top.about in ("person", "company") and top.age_days is not None
-                       and top.age_days <= SENSITIVE_UNAVOIDABLE_DAYS and top.specificity_0_3 >= 2)
+        # Can't reasonably be ignored: very fresh (<= 30 days), or recent and specific to the person/their team.
+        unavoidable = top.age_days is not None and (
+            top.age_days <= SENSITIVE_FRESH_DAYS
+            or (top.age_days <= SENSITIVE_UNAVOIDABLE_DAYS and top.specificity_0_3 >= 2))
         if unavoidable:
             return RouteDecision(
                 DRAFT_WITH_WARNING, "R3",

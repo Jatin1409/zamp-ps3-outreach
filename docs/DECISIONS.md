@@ -32,11 +32,15 @@ not as "edge-case routes".
   data, nothing real to say, saying the wrong thing at the wrong time. Each one changes what the rep sees and must do.
 
 ### D4. Sensitive = "strongest news", not "highest hook score"
-- **Decision:** the sensitive rule fires when the strongest sensitive item scores within 0.10 of the best safe hook (or
-  above it). Unavoidable if ≤ 90 days old, about the person/company, specificity ≥ 2.
-- **Why:** first version only fired when the sensitive item out-scored everything. In an integration test a layoff
-  7 days old lost to an interview by 0.06 and the draft was routed as a normal, no-warning draft. Being a close second is enough to make
-  ignoring it tone-deaf.
+- **Decision:** the top sensitive item about the person/company counts as "the strongest news" if it scores within
+  0.10 of the best safe hook, **or** it outranks every safe company-level item (it is the headline company news).
+  It is unavoidable if ≤ 30 days old, or ≤ 90 days old and specific to the person/their team. Namesakes and
+  unrelated companies never trigger it.
+- **Why (two iterations, both from evidence):** v1 fired only when the sensitive item out-scored everything; in an
+  integration test a 7-day-old layoff lost to an interview by 0.06 and went through as a normal draft. v2 added the
+  0.10 margin; then a **live run** (Sarah Riley → Canva, 2026-11-05) found Canva had announced a 1,200-person
+  restructuring the day before. It was correctly excluded as a hook but, at 0.17 below a person-level hook, didn't
+  trigger tone handling — though it was the top Canva news item. v3 (current) catches that case.
 - **Tradeoff:** more drafts require acknowledgement; occasionally for news the rep would consider minor.
 
 ### D5. Ask the rep rather than guess on identity

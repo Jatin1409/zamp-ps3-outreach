@@ -17,7 +17,7 @@ _PATTERNS = [
     r"ignore (all |any |the )?(previous|prior|above|earlier) (instructions|prompts|messages|rules)",
     r"disregard (all |any |the )?(previous|prior|above|earlier|your) (instructions|prompts|rules|guidelines)",
     r"forget (all |your |the )?(previous |prior )?(instructions|rules|guidelines)",
-    r"\byou are now\b",
+    r"\byou are now (a|an|the|my|acting|in \w+ mode|free|unrestricted|jailbroken)\b",
     r"\bnew instructions\s*:",
     r"\bsystem prompt\b",
     r"\b(as an|to the|attention,?) (ai|llm|language model|assistant|chatbot)\b",
