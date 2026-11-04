@@ -322,3 +322,19 @@ async def test_self_contradicting_identity_downgraded(client, base):
     rid, d = await run(client, fx)
     assert d["identity"]["status"] == "resolved" and d["identity"]["confidence"] == "medium"
     assert any("treated as unclear" in r for r in d["identity"]["reasons"])
+
+
+async def test_ambiguous_pick_of_former_namesake_researches_their_current_company(client, base):
+    fx = copy.deepcopy(base)
+    c1 = fx["llm"]["identity"][0]["candidates"][0]
+    c1.update(at_input_company="former", current_company="Globex Logistics")
+    c2 = copy.deepcopy(c1)
+    c2.update(current_company="Initech", current_role="Advisor",
+              evidence=[{"source": 0, "quote": "The company says it now works with more than 4,000 carriers."}])
+    fx["llm"]["identity"][0]["candidates"].append(c2)
+    rid, d = await run(client, fx)
+    assert d["pause"]["kind"] == "ambiguous"
+    await client.post(f"/api/runs/{rid}/decision", headers=H, json={"choice": "pick", "candidate_id": "c2"})
+    d = await refresh(client, rid)
+    assert stage(d, "gather")["input"]["prospect"]["company"] == "Initech"
+    assert d["prospect"]["company"] == "Northwind Freight"  # original input untouched

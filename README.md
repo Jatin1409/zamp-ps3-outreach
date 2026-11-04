@@ -100,6 +100,7 @@ Runs every sample scenario live, checks it took its designed route, and writes `
 | `GEMINI_MODEL` / `GEMINI_MODEL_FAST` | `gemini-3.6-flash` / `gemini-3.5-flash-lite` | drafting+verification / classification+scoring |
 | `LLM_EFFORT_FAST` / `LLM_EFFORT_DRAFT` | `low` / `medium` | thinking level per tier |
 | `LLM_MIN_INTERVAL_S` | `1.0` | spacing between model calls (free-tier quotas) |
+| `GEMINI_FALLBACKS` / `GEMINI_FAST_FALLBACKS` | `gemini-3.8-flash,gemini-3.5-flash-lite` / `gemini-3.1-flash-lite` | models tried in order when one's daily free quota is used up or it is overloaded; the model that answered is shown per stage |
 | `ANTHROPIC_API_KEY`, `LLM_MODEL`, `LLM_MODEL_FAST` | — / `claude-opus-5-5` | only if `LLM_PROVIDER=anthropic` |
 | `TAVILY_API_KEY` | — | web search |
 | `SEARCH_COST_PER_CALL_USD` | `0` | cost shown per search (0 on Tavily free tier) |

@@ -123,8 +123,14 @@ swapping a vendor is one class.
   - *Data use:* Google's pricing page says free-tier prompts are "used to improve our products". What gets sent is
     public web text, rep notes and the fictional seller profile. Reps should not paste confidential CRM notes while on
     the free tier; the paid tier is not used for training.
-  - *Quotas:* free-tier limits are per project and shown only in AI Studio. Calls are spaced (`LLM_MIN_INTERVAL_S`)
-    and 429s are retried with the server's suggested delay (up to 4 times); exhausting that fails the stage visibly.
+  - *Quotas:* free-tier limits are per project **per model per day** — measured on 2026-11-05 from the error's
+    quota id: `GenerateRequestsPerDayPerProjectPerModel-FreeTier limit=20` for `gemini-3.6-flash`. A run makes
+    ~3–5 drafting-tier calls, so one Flash model alone allows only a handful of runs a day. **Model fallback chain:**
+    each tier has an ordered list (drafting: 3.6-flash → 3.8-flash → 3.5-flash-lite; classification: 3.5-flash-lite
+    → 3.1-flash-lite). A daily-quota 429 marks that model exhausted until its reset and moves on immediately; a
+    per-minute 429 waits the server's suggested delay; a 503 backs off then falls back. The model that actually
+    answered is stored on every call and shown in the stage's technical details. If every model is exhausted the
+    stage fails visibly with "daily free-tier quota used up".
   - *Quality:* expected to be somewhat weaker on subtle judgements than a frontier model; this is measured in
     `docs/EVAL_RESULTS.md`, not assumed. Deterministic safeguards (quote matching, code routing) do not depend on
     which model is used.
