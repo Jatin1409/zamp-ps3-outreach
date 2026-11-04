@@ -10,3 +10,5 @@ backend/static/
 .pytest_cache/
 .coverage
 backend/dev_ui.env
+*.db-shm
+*.db-wal
