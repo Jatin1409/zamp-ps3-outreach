@@ -59,6 +59,16 @@ def decide_identity(cands: list[CandidateView], has_input_role: bool, conflictin
             + "; ".join(f"{c.full_name} ({c.current_role or 'role unknown'})" for c in at_company)],
             candidates=[c.id for c in at_company])
 
+    if not at_company and len(plausible) >= 2:
+        # Several distinct people with this name and none clearly at the company now: asking "which one?" comes
+        # before "has this person moved?" (seen live: two different former-Deloitte Michael Browns).
+        return IdentityDecision("ambiguous", "low", reasons + [
+            f"{len(plausible)} different people with this name were found, none clearly at the company you "
+            "entered now: " + "; ".join(f"{c.full_name} ({c.current_role or 'role unknown'}"
+                                         f"{', ' + c.current_company if c.current_company else ''})"
+                                         for c in plausible)],
+            candidates=[c.id for c in plausible])
+
     if not at_company and former:
         c = max(former, key=lambda x: x.verified_sources)
         return IdentityDecision("role_conflict", "low", reasons + [

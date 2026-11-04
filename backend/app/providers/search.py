@@ -72,6 +72,10 @@ class TavilySearch:
         }
         if q.time_range:
             body["time_range"] = q.time_range
+        # Excluded at the source so the result slots go to usable public pages (see DECISIONS D9).
+        from ..pipeline.stages import EXCLUDED_DOMAINS
+
+        body["exclude_domains"] = EXCLUDED_DOMAINS
         last = ""
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             for attempt in range(self.retries + 1):

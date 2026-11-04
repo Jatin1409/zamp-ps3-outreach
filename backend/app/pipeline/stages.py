@@ -167,6 +167,9 @@ def effective_prospect(run: Run) -> dict:
         if d.get("kind") == "ambiguous" and d.get("candidate"):
             c = d["candidate"]
             p["role"] = c.get("current_role") or p.get("role")
+            # research the person the rep picked, where they are now (the original input stays on the run)
+            if c.get("current_company") and c.get("at_input_company") in ("former", "never"):
+                p["company"] = c["current_company"]
             p["distinguisher"] = c.get("distinguisher")
     return p
 

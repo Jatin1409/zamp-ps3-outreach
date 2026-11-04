@@ -270,3 +270,10 @@ def test_route_fresh_layoff_triggers_even_when_outscored():
     d = R.decide_route([sig("s7", 0.76, "company"), sig("s6", 0.71, "person"),
                         sig("s16", 0.53, "company", eligible=False, sens="layoff", age=1, spec=1)], "medium")
     assert (d.route, d.rule, d.sensitive_mode, d.sensitive_signal) == ("draft_with_warning", "R3", "acknowledge", "s16")
+
+
+def test_identity_two_former_namesakes_is_ambiguous_not_conflict():
+    # Real case (2026-11-05): two different Michael Browns, both formerly at Deloitte.
+    d = R.decide_identity([cand("c1", at="former", company="Dowling & Yahnke", r="Advisor", src=1),
+                           cand("c2", at="former", company="", r="Former VP and CFO", src=1)], True, False)
+    assert d.status == "ambiguous" and set(d.candidates) == {"c1", "c2"}

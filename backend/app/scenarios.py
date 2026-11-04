@@ -41,6 +41,18 @@ SCENARIOS: list[dict] = [
                      "2026-11-03/04, so the draft also carries the sensitive-signal acknowledgement.",
     },
     {
+        "key": "ambiguous_deloitte",
+        "title": "Edge case — ambiguous identity",
+        "description": "A common name at a firm with thousands of partners. Public sources show several different "
+                       "Michael Browns linked to Deloitte; the run pauses and asks which one you mean.",
+        "expected_route": "do_not_draft", "edge_case": "ambiguous_identity",
+        "eval_decision": {"choice": "stop"},
+        "prospect": {"name": "Michael Brown", "company": "Deloitte", "role": "Partner"},
+        "demo_note": "In the demo, show the candidates and evidence, then either pick one (research follows that "
+                     "person's current company) or choose 'None of these - stop'. The eval stops, so its expected "
+                     "route is do_not_draft (stopped by rep).",
+    },
+    {
         "key": "thin_company_fallback",
         "title": "Edge case — thin signal (company fallback)",
         "description": "A name from a list with no public footprint, at a company with real news. Falls back to a "
@@ -49,6 +61,15 @@ SCENARIOS: list[dict] = [
         "prospect": {"name": "Marta Kowalczyk", "company": "Rosenbauer International",
                      "role": "Head of Accounts Payable"},
         "demo_note": "Illustrative name chosen to have no public footprint (searched 2026-11-05: none found).",
+    },
+    {
+        "key": "thin_nothing",
+        "title": "Edge case — nothing usable (do not draft)",
+        "description": "A prospect at a company with no public footprint. Rather than invent a reason to write, "
+                       "the process recommends not sending and lists what is missing.",
+        "expected_route": "do_not_draft", "edge_case": "thin_signal",
+        "prospect": {"name": "Tomas Lindqvist", "company": "Brightwater Fasteners GmbH", "role": "Finance Director"},
+        "demo_note": "Fictional company; verified 2026-11-05 that search finds nothing usable.",
     },
     {
         "key": "sensitive_canva",
