@@ -338,3 +338,25 @@ async def test_ambiguous_pick_of_former_namesake_researches_their_current_compan
     d = await refresh(client, rid)
     assert stage(d, "gather")["input"]["prospect"]["company"] == "Initech"
     assert d["prospect"]["company"] == "Northwind Freight"  # original input untouched
+
+
+async def test_skipped_signals_are_reasked_then_left_out_not_zeroed(client, base):
+    # Seen live: a fallback model judged 3 of 14 items. Re-ask; anything still missing is listed, not scored 0.
+    fx = copy.deepcopy(base)
+    full = fx["llm"]["rank"][0]
+    only_s2 = {"judgments": [j for j in full["judgments"] if j["sid"] == "s2"]}
+    fx["llm"]["rank"] = [only_s2, only_s2, only_s2]  # s1 never judged, even on re-ask
+    rid, d = await run(client, fx)
+    out = stage(d, "rank")["output"]
+    assert [r["sid"] for r in out["ranking"]] == ["s2"]
+    assert [u["sid"] for u in out["unscored"]] == ["s1"]
+    assert "could not be scored" in stage(d, "rank")["explanation"]
+    assert d["status"] == "awaiting_review"
+
+
+async def test_no_scores_at_all_fails_the_stage(client, base):
+    fx = copy.deepcopy(base)
+    fx["llm"]["rank"] = [{"judgments": []}]
+    rid, d = await run(client, fx)
+    assert d["status"] == "failed" and stage(d, "rank")["status"] == "failed"
+    assert "no scores" in stage(d, "rank")["error"]

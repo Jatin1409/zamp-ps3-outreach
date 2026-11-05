@@ -62,6 +62,13 @@ export default function SignalsPanel({ run }: { run: RunDetail }) {
             );
           })}
         </div>
+        {(rank?.unscored?.length ?? 0) > 0 && (
+          <div className="callout neutral small" style={{ marginTop: 12 }}>
+            <div><strong>Not scored ({rank.unscored.length}).</strong> The model didn't return a judgement for these, even
+              after being asked again, so they were left out of the ranking rather than given a made-up score:
+              {rank.unscored.map((u: any) => <div key={u.sid} className="muted">• {u.title || u.url}</div>)}</div>
+          </div>
+        )}
       </div>
 
       <div className="card">

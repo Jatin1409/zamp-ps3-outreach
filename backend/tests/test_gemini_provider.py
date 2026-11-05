@@ -83,10 +83,31 @@ async def test_429_is_retried_then_succeeds(monkeypatch):
 
 async def test_429_exhausted_raises_rate_limited(monkeypatch):
     e = errors.ClientError(429, {"error": {"code": 429, "message": "quota", "status": "RESOURCE_EXHAUSTED"}})
-    llm, _ = make(monkeypatch, [e] * 10)
+    llm, fm = make(monkeypatch, [e] * 40)
     with pytest.raises(LLMError) as ex:
         await llm.complete(purpose="filter", system="s", user="u", schema=FilterBatch)
     assert ex.value.kind == "rate_limited"
+    assert len({c["model"] for c in fm.calls}) == 4  # every configured model was tried
+
+
+async def test_whole_chain_overloaded_backs_off_and_recovers(monkeypatch):
+    # Seen live: 3.8-flash and 3.5-flash-lite both 503; only 3.1-flash-lite answering - and sometimes none.
+    G._exhausted_until.clear()
+    e503 = errors.ServerError(503, {"error": {"code": 503, "message": "high demand", "status": "UNAVAILABLE"}})
+    llm, fm = make(monkeypatch, [e503] * 4 + [resp(OK)])
+    r = await llm.complete(purpose="draft", system="s", user="u", schema=FilterBatch, tier="draft")
+    assert [c["model"] for c in fm.calls[:4]] == ["gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite",
+                                                  "gemini-3.1-flash-lite"]
+    assert fm.calls[4]["model"] == "gemini-3.6-flash"   # second round after backing off
+    assert len(r.fallback_from) == 4
+
+
+async def test_draft_tier_can_fall_back_to_fast_tier_model(monkeypatch):
+    G._exhausted_until.clear()
+    e503 = errors.ServerError(503, {"error": {"code": 503, "message": "high demand", "status": "UNAVAILABLE"}})
+    llm, fm = make(monkeypatch, [e503, e503, e503, resp(OK)])
+    r = await llm.complete(purpose="draft", system="s", user="u", schema=FilterBatch, tier="draft")
+    assert r.model == "gemini-3.1-flash-lite"
 
 
 async def test_bad_key_is_config_error(monkeypatch):

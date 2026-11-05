@@ -219,6 +219,33 @@ async def stage_gather(ctx: RunContext, run: Run) -> list[dict]:
     return [{"sid": r.sid} for r in rows]
 
 
+# =========================================================================== batched judgements
+async def judge_in_batches(ctx: RunContext, h: StageHandle, *, purpose: str, system: str, make_user, items: list[dict],
+                           schema, batch_size: int, reasks: int = 2) -> tuple[dict, list[str]]:
+    """Ask for one judgement per item, in small batches; re-ask for any the model skipped.
+
+    Seen live: a fallback model given 14 items in one call judged only 3. Smaller batches + targeted re-asks get
+    near-complete coverage; anything still missing is returned so the caller can show it honestly.
+    """
+    got: dict = {}
+    todo = list(items)
+    for attempt in range(reasks + 1):
+        if not todo:
+            break
+        if attempt:
+            await h.progress(f"The model skipped {len(todo)} item(s); asking again for just those")
+        for i in range(0, len(todo), batch_size):
+            batch = todo[i:i + batch_size]
+            res = await ctx.llm_call(h, purpose=purpose, system=system, user=make_user(batch), schema=schema,
+                                     tier="fast")
+            asked = {it["id"] for it in batch}
+            for j in res.data.judgments:
+                if j.sid in asked and j.sid not in got:
+                    got[j.sid] = j
+        todo = [it for it in todo if it["id"] not in got]
+    return got, [it["id"] for it in todo]
+
+
 # =========================================================================== 3. filter
 async def load_signals(run_id: str, status: str | None = None) -> list[Signal]:
     async with session() as s:
@@ -268,9 +295,9 @@ async def stage_filter(ctx: RunContext, run: Run):
         if live:
             items = [{"id": x.sid, "url": x.url, "title": x.title, "published": x.published_date,
                       "text": (x.judgments or {}).get("focus", x.text)} for x in live[:30]]
-            res = await ctx.llm_call(h, purpose="filter", system=P.FILTER_SYSTEM, user=P.filter_user(p, items),
-                                     schema=FilterBatch, tier="fast")
-            js = {j.sid: j for j in res.data.judgments}
+            js, _ = await judge_in_batches(ctx, h, purpose="filter", system=P.FILTER_SYSTEM,
+                                           make_user=lambda b: P.filter_user(p, b), items=items,
+                                           schema=FilterBatch, batch_size=15)
             for x in live[30:]:
                 x.status, x.drop_reason = "dropped", "Over the per-run review limit (30 items)"
             for x in live[:30]:
@@ -326,9 +353,9 @@ async def stage_rank(ctx: RunContext, run: Run) -> list[dict]:
         await h.progress(f"Scoring {len(cand)} signals for specificity and relevance to {run.seller_profile.get('company_name', 'the seller')}")
         items = [{"id": x.sid, "url": x.url, "title": x.title, "published": x.published_date,
                   "type": x.signal_type, "text": (x.judgments or {}).get("focus", x.text)} for x in cand]
-        res = await ctx.llm_call(h, purpose="rank", system=P.RANK_SYSTEM,
-                                 user=P.rank_user(p, run.seller_profile, items), schema=RankBatch, tier="fast")
-        js = {j.sid: j for j in res.data.judgments}
+        js, unscored = await judge_in_batches(ctx, h, purpose="rank", system=P.RANK_SYSTEM,
+                                              make_user=lambda b: P.rank_user(p, run.seller_profile, b),
+                                              items=items, schema=RankBatch, batch_size=7)
         domain = guess_company_domain(p["company"], sigs)
         t = today()
         scored = []
@@ -348,18 +375,27 @@ async def stage_rank(ctx: RunContext, run: Run) -> list[dict]:
                            "key_fact": j.key_fact, "key_fact_verified": verified, "key_fact_match": ratio,
                            "seller_problem": j.seller_problem, "why": j.why}
             scored.append(sc)
-        for x in sigs:
-            if x.sid not in js and x in cand:
-                x.scores = {"total": 0, "eligible": False, "ineligible_reason": "Not scored by the model"}
+        missing = [x for x in cand if x.sid not in js]
+        if cand and not scored:
+            raise StageFailed(f"The model returned no scores for any of the {len(cand)} signals, even after "
+                              "re-asking. This is a model problem, not a lack of signal - retry the run.",
+                              "llm_incomplete")
+        for x in missing:
+            # not given a fake 0 score: left out of the ranking (and of routing) and listed separately
+            x.scores = None
+            x.judgments = {**(x.judgments or {}), "unscored": True}
         await save_signals(sigs)
         expl = explain_ranking(scored)
         ranking = sorted(({"sid": x.sid, "title": x.title, "url": x.url, "about": x.about, **(x.scores or {})}
                           for x in cand if x.scores), key=lambda r: r["total"], reverse=True)
         h.output = {"ranking": ranking, "explain": expl, "company_domain": domain,
+                    "unscored": [{"sid": x.sid, "title": x.title, "url": x.url} for x in missing],
                     "formula": "0.30*specificity + 0.30*relevance + 0.25*recency + 0.15*credibility"}
         win = next((r for r in ranking if r["sid"] == expl.get("winner")), None)
-        h.explanation = (f"Ranked {len(ranking)} signals. Top hook: “{win['title'][:90]}”. "
-                         + expl["why_winner"]) if win else "No signal qualified as a safe, verifiable hook."
+        h.explanation = ((f"Ranked {len(ranking)} signals. Top hook: “{win['title'][:90]}”. "
+                          + expl["why_winner"]) if win else "No signal qualified as a safe, verifiable hook.") + (
+            f" {len(missing)} item(s) could not be scored by the model even after re-asking and were left out."
+            if missing else "")
     return ranking
 
 

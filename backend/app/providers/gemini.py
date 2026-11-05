@@ -96,16 +96,24 @@ class GeminiLLM:
             _last_call = time.monotonic()
 
     def chain(self, tier: str) -> list[str]:
+        """This tier's models first, then every other configured model as a last resort.
+
+        Seen live (2026-11-05): Google returned 503 'high demand' for 3.8-flash and 3.5-flash-lite at the same time
+        while 3.1-flash-lite kept answering - so no tier should be limited to its own short list.
+        """
         s = self.s
-        primary = s.gemini_model_fast if tier == "fast" else s.gemini_model
-        extra = s.gemini_fast_fallbacks if tier == "fast" else s.gemini_fallbacks
-        out = [primary] + [m.strip() for m in extra.split(",") if m.strip()]
-        return list(dict.fromkeys(out))
+        draft = [s.gemini_model] + [m.strip() for m in s.gemini_fallbacks.split(",") if m.strip()]
+        fast = [s.gemini_model_fast] + [m.strip() for m in s.gemini_fast_fallbacks.split(",") if m.strip()]
+        return list(dict.fromkeys((fast + draft) if tier == "fast" else (draft + fast)))
 
     async def complete(self, *, purpose, system, user, schema, tier="fast", max_tokens=8000) -> LLMResult:
         s, types, errors = self.s, self.types, self.errors
-        models = [m for m in self.chain(tier) if not _exhausted(m)] or self.chain(tier)[-1:]
+        models = [m for m in self.chain(tier) if not _exhausted(m)]
+        if not models:
+            raise LLMError("Gemini API error 429: daily free-tier quota used up for every configured model",
+                           kind="rate_limited")
         mi = 0
+        rounds = 0
         level = s.llm_effort_fast if tier == "fast" else s.llm_effort_draft
         json_schema = inline_schema(schema.model_json_schema())
         prompt = user
@@ -129,28 +137,46 @@ class GeminiLLM:
                 if code in (401, 403):
                     raise LLMError("Gemini rejected the API key (check GEMINI_API_KEY)", kind="config") from e
                 daily = code == 429 and _is_daily_quota(e)
-                if daily:
-                    _mark_exhausted(model, _retry_delay(e) or 3600)
-                if (daily or code in (404, 503)) and mi + 1 < len(models):
-                    skipped.append(f"{model} ({'daily quota used up' if daily else code})")
-                    mi += 1
-                    transient_tries = 0
+                if daily or code == 404:
+                    # this model can't serve today: drop it from this call's chain
+                    if daily:
+                        _mark_exhausted(model, _retry_delay(e) or 3600)
+                    skipped.append(f"{model} ({'daily quota used up' if daily else 'not found'})")
+                    models.pop(mi)
+                    if not models:
+                        msg = ("daily free-tier quota used up for every configured model" if daily
+                               else f"model '{model}' not found")
+                        raise LLMError(f"Gemini API error {code}: {msg}",
+                                       kind="rate_limited" if daily else "config") from e
+                    mi = mi % len(models)
                     continue
-                if code == 404:
-                    raise LLMError(f"Gemini model '{model}' not found", kind="config") from e
-                if not daily and code in (429, 500, 502, 503, 504) and transient_tries < s.gemini_max_retries:
-                    transient_tries += 1
+                if code in (429, 500, 502, 503, 504):
+                    # temporary (overload / per-minute limit): try the next model now; if the whole chain is
+                    # busy, back off and go round again
+                    skipped.append(f"{model} ({code})")
+                    if mi + 1 < len(models):
+                        mi += 1
+                        continue
+                    rounds += 1
+                    if rounds > s.gemini_max_retries:
+                        raise LLMError(f"Gemini API error {code}: every configured model was overloaded or "
+                                       f"rate-limited across {rounds} attempts - try again in a minute",
+                                       kind="rate_limited" if code == 429 else "provider_error") from e
                     delay = _retry_delay(e) if code == 429 else None
-                    await asyncio.sleep(min(60.0, delay or (2 ** transient_tries * 2)) + random.random())
+                    await asyncio.sleep(min(30.0, delay or 3 * 2 ** rounds) + random.random())
+                    mi = 0
                     continue
-                kind = "rate_limited" if code == 429 else "provider_error"
-                msg = "daily free-tier quota used up for every configured model" if daily else str(e)[:300]
-                raise LLMError(f"Gemini API error {code}: {msg}", kind=kind) from e
+                raise LLMError(f"Gemini API error {code}: {str(e)[:300]}", kind="provider_error") from e
             except (asyncio.TimeoutError, TimeoutError) as e:
-                if transient_tries < s.gemini_max_retries:
-                    transient_tries += 1
+                skipped.append(f"{model} (timeout)")
+                if mi + 1 < len(models):
+                    mi += 1
                     continue
-                raise LLMError("Gemini timed out after retries", kind="timeout") from e
+                rounds += 1
+                if rounds > s.gemini_max_retries:
+                    raise LLMError("Gemini timed out on every configured model", kind="timeout") from e
+                mi = 0
+                continue
             except Exception as e:  # network errors from the http layer
                 if transient_tries < s.gemini_max_retries and "connect" in type(e).__name__.lower():
                     transient_tries += 1
