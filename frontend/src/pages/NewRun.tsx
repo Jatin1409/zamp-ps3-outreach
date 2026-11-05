@@ -52,11 +52,15 @@ export default function NewRun() {
           <div className="b" style={{ left: 200, top: 40, width: 110, height: 120, background: "var(--glow-warm)" }} />
           <div className="b" style={{ left: 180, top: 180, width: 140, height: 110, background: "var(--glow-mist)" }} />
         </div>
-        <div className="eyebrow">Prospect → draft · human-reviewed</div>
-        <h1 style={{ marginTop: 8 }}>Name a prospect. Get a draft grounded in something real.</h1>
-        <p className="lead">The process researches public sources, picks the most relevant hook, writes a short email, and
-          fact-checks every claim against its source. You approve it. Nothing is ever sent.</p>
+        <div className="eyebrow">Zamp · AI Solutions Analyst case study · PS-3 personalised outreach</div>
+        <h1 style={{ marginTop: 8 }}>From prospect to a draft worth reviewing — grounded in something real.</h1>
+        <p className="lead">A rep names a B2B prospect. The process confirms who they are, researches public sources,
+          picks the most relevant hook, writes a short email, and fact-checks every claim against its source. A human
+          approves before anything goes anywhere — it cannot send email.</p>
         <div className="steps">{STEPS.map((s, i) => <span key={s} className="step-chip"><span className="mono">{String(i + 1).padStart(2, "0")}</span>{s}</span>)}</div>
+        <div className="review-tip"><strong>Reviewing this submission?</strong> You play the sales rep. Start with a
+          sample scenario — each is a real, live run chosen to trigger one route: the happy path, an outdated role,
+          an ambiguous identity, thin signal, or sensitive news. Or enter any prospect of your own.</div>
       </section>
 
       <div className="grid-2">
@@ -115,11 +119,13 @@ export default function NewRun() {
           </div>
 
           <div className="card stack">
-            <div className="row-between"><h3>Selling as</h3><Link to="/seller" className="btn secondary sm"><Pencil size={13} /> Edit</Link></div>
+            <div className="row-between"><h3>Drafts are written for</h3><Link to="/seller" className="btn secondary sm"><Pencil size={13} /> Edit</Link></div>
             {!seller ? <div className="skeleton" style={{ height: 60 }} /> : (
               <>
                 <p className="small"><strong>{seller.company_name}</strong> — {seller.product}</p>
-                {seller.fictional_notice && <p className="small muted">{seller.fictional_notice}</p>}
+                <p className="small muted">As the PS-3 brief asks, the seller is a clearly fictional AP-automation company,
+                  so no real company's claims are put into drafts. Edit the profile to try a different seller — every
+                  proof point can be quoted word-for-word, so keep them true.</p>
               </>
             )}
           </div>

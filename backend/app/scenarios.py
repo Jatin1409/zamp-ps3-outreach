@@ -74,7 +74,7 @@ SCENARIOS: list[dict] = [
     {
         "key": "sensitive_canva",
         "title": "Edge case — sensitive news",
-        "description": "Canva announced a 1,200-person restructuring this week. It must not be used as a hook; "
+        "description": "Canva announced a 1,200-person restructuring on 3-4 Nov 2026. It must not be used as a hook; "
                      "the tone is adapted and approval needs an explicit acknowledgement.",
         "expected_route": "draft_with_warning", "edge_case": "sensitive_signal",
         "prospect": {"name": "Kelly Steckelberg", "company": "Canva", "role": "CFO"},
