@@ -172,3 +172,20 @@ edge cases — sensitive 3, thin 2, outdated 1, ambiguous 1.
 - **Browser walkthrough of the deployed site past the access-code screen**: the deployed site was checked from a fresh
   session up to the access-code screen and every deployed API path above was exercised directly; the full UI was
   checked on real data on a local instance. A human click-through of the deployed UI is still to do.
+
+## Follow-up: Google overload incident (2026-11-06)
+
+A reviewer run (`b91140b6dbb7`) failed at **Write draft** with `503 UNAVAILABLE - model is experiencing high demand`,
+and its ranking showed 11 of 14 signals as "0.00 · Not scored by the model". Root causes from the run's call log:
+Google returned 503 for `gemini-3.8-flash` and `gemini-3.5-flash-lite` at the same time; the drafting chain did not
+include `gemini-3.1-flash-lite` (the one model answering), so it retried one overloaded model and gave up; and the
+fallback model, given 14 signals in one call, judged only 3 — the UI then drew the rest as real zero scores.
+
+Fixes: every tier can fall back to any configured model, and when the whole chain is busy it backs off and goes
+round again (up to 4 rounds); signals are judged in batches of 7 (filter: 15) and skipped items are re-asked up to
+twice; anything still unscored is listed separately ("Not scored"), never shown as 0.00, and a ranking with no scores
+at all fails the stage instead of routing to "do not draft". 6 new tests.
+
+Verified live after deploying: the failed run was retried and reached review (0 unsupported claims, with 3.5-flash-lite
+still returning 503); a fresh run of the same scenario (`6e43cd039f1c`) scored **14/14** signals and produced a
+verified, specific draft in 150 s.
