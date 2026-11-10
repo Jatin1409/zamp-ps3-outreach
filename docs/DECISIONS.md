@@ -178,3 +178,71 @@ one line per service in `render.yaml` (`plan: starter`, `plan: basic-256mb`).
 - Costs shown are estimates from published per-token prices and Tavily's per-credit price, not invoices.
 - Sample scenarios use real, public business figures; public facts drift, so scenario expectations must be re-verified
   (`scripts/eval.py`) before a demo.
+
+## Iteration 2 (2026-11-11): performance, stop, profiles, entity checks
+
+### D21. Performance work came from measurement, not from adding a timeout
+Profiling real deployed runs (per-stage durations + per-model-call latencies) showed the model calls themselves were
+mostly quick (1-15 s); the time went to (a) **fallback waits** - every call rediscovering the same overloaded or
+quota-exhausted Gemini model with backoff sleeps (50-100 s on a single draft call), (b) **sequential I/O** - 3 + 5 web
+searches and 2-3 scoring batches run one after another, (c) a 1 s global spacing between model calls, (d) a full
+regeneration loop when a draft was generic. Changes, in order of impact:
+- **Circuit breaker:** a model that 503s or stalls is deprioritised for every call for 20 s (and a model whose daily
+  free quota is used up is skipped until it resets). Earlier each call re-tried it from scratch.
+- **Hedged requests:** if a model hasn't answered after 4 s (classification) / 9 s (drafting), the same request is
+  sent to the next model and the first answer wins; the loser is cancelled. Targets the long tail directly.
+- **Fast-only chains:** classification never falls back to the slower, 20-requests/day Flash models (measured:
+  20-45 s lost per call when it did); per-attempt timeouts cut from 20/35 s to 10/20 s.
+- **Parallel I/O:** identity (4) and gather (5) searches run concurrently; scoring batches run concurrently; the
+  genericness swap test runs at the same time as claim verification instead of after it.
+- **Search cache:** identical searches (same query + filters) are reused for 6 h across runs.
+- **Cheaper verification:** claim-checking uses the drafting models at low thinking effort (it's extraction).
+- Result: see `docs/EVAL_RESULTS.md` -> Performance. Under a period of heavy Google free-tier overload, 5/5 live runs
+  finished inside 90 s (avg 65.6 s) where 2 of 3 had hit the limit before the hedging/fast-chain changes.
+- **Tradeoff:** hedging can spend two requests on one answer (only when the first is slow); the cache can serve
+  results up to 6 h old (news queries are already limited to the last year, so this doesn't change routing).
+
+### D22. A hard 90-second budget that degrades gracefully
+- Each execution gets a deadline (start: 90 s; resume after a rep decision: what's left; regenerate/retry: a fresh
+  90 s - they're new executions the rep asked for). Time spent waiting for the rep never counts.
+- The deadline is handed down to every provider call (no attempt or backoff sleep may outlive it), and optional work
+  is only started if it can finish: a lint retry or claim rewrite needs >= 22 s left, a genericness regeneration >= 35 s.
+  Skipped steps become explicit warnings ("not regenerated because it could not finish within the 90-second limit").
+- If the limit is hit anyway: if a draft exists, the run goes to review **marked incomplete** ("claims were NOT
+  fact-checked" / "genericness check did not run") and approving requires an explicit acknowledgement; otherwise the run
+  ends as `timed_out` with everything found so far kept, and can be resumed or re-run.
+- Consistency: one finaliser marks the running stage `timed_out`, later stages `skipped`, discards a half-finished new
+  draft if a complete earlier one exists, and never leaves anything `running`.
+- **Tradeoff:** on a very slow provider day the rep sometimes gets an unverified draft instead of a verified one; it is
+  never presented as verified.
+
+### D23. Stop = cancel the job's task
+- `POST /runs/{id}/cancel` sets `cancel_requested` and, if the run is executing in this process, calls
+  `RunContext.interrupt("user")`, which cancels the job's asyncio task. In-flight HTTP calls (Tavily, Gemini) are
+  awaited inside that task, so they are aborted with it; `ctx.check()` guards every new call so nothing starts after a
+  stop. Queued or paused runs are finalised directly; a run executing in another worker process sees the flag within
+  ~1 s (the worker polls). Idempotent: repeated stops are harmless; stopping a finished run returns `already_finished`.
+- Stopping a *regeneration* keeps the previous complete draft. The browser side uses `AbortController` for its own
+  requests so a slow response can't overwrite a newer one.
+
+### D24. Multiple seller profiles: selection travels with the request
+- Profiles are rows (CRUD + duplicate + reset-to-example for the default). The selected profile id is stored in the
+  viewer's browser and sent as `X-Seller-Profile`, so two reviewers can work in different profiles simultaneously.
+- Every run stores `seller_profile_id` **and** a snapshot of the profile's content: editing or deleting a profile never
+  rewrites past runs. Dashboard and metrics are filtered by profile (default: the current one; "All profiles" option).
+  Runs created before profiles existed have no id and are treated as the default profile's.
+- Guardrails: unique names, at least one "problem solved" (relevance scoring needs it), can't delete the last profile
+  or one with a run in progress, max 25 profiles.
+- **Tradeoff:** no per-user ownership - anyone with the access code sees and can edit every profile.
+
+### D25. Entity checks: person, company, fiction - decided in code, evidenced by quotes
+- The identity stage now also searches the company on its own and the model reports, per person and per company,
+  whether sources describe it as **fictional**, with a quote. As everywhere else, a claim only counts if its quote is
+  found in the page text - the model's say-so alone decides nothing (tested).
+- Outcomes (code, `routing.identity_gate`): fictional person or company -> stop, nothing drafted, verified facts from
+  the fiction shown separately from what exists in the real world (live example: real companies called "Stark
+  Industries" exist; no real Tony Stark works at them); several real companies with the name and the person doesn't
+  disambiguate -> pause and ask which; neither person nor company found -> stop with "what we checked";
+  person not found but company found -> company-level research only (labelled lower personalisation).
+- Every run shows a **"What we could verify"** checklist (person, employer, role, company, person-level signal, company
+  news) with verified / not verified / conflicting / fictional for each, so partial information is explicit.

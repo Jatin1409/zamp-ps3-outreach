@@ -442,3 +442,33 @@ async def test_fictional_person_with_real_namesake_company_is_described_accurate
     assert d["identity"]["status"] == "fictional"
     assert "do exist" in f["real_world"] and "compressor manufacturer" in f["real_world"]
     assert f["real_companies"][0]["evidence"][0]["verified"]
+
+
+async def test_failed_optional_reask_does_not_sink_the_run(client, base):
+    # Seen live: ranking had scored the signals, then an optional re-ask for skipped items timed out and took the
+    # whole run with it. Now a failed batch/re-ask is logged and the stage continues with what it has.
+    fx = copy.deepcopy(base)
+    only_s2 = {"judgments": [j for j in fx["llm"]["rank"][0]["judgments"] if j["sid"] == "s2"]}
+    fx["llm"]["rank"] = [only_s2]                          # s1 is skipped by the model ...
+    fx["llm_delay_s"] = {"rank": 0}
+    rid = await create(client, fx)
+    from app.providers import llm as L
+    orig = L.FixtureLLM.complete
+    calls = {"rank": 0}
+
+    async def flaky(self, **kw):
+        if kw["purpose"] == "rank":
+            calls["rank"] += 1
+            if calls["rank"] > 1:                           # ... and every re-ask fails
+                raise L.LLMError("503 storm", kind="provider_error")
+        return await orig(self, **kw)
+
+    L.FixtureLLM.complete = flaky
+    try:
+        await jobs.drain()
+    finally:
+        L.FixtureLLM.complete = orig
+    d = await get(client, rid)
+    assert d["status"] == "awaiting_review"
+    out = stage(d, "rank")["output"]
+    assert [r["sid"] for r in out["ranking"]] == ["s2"] and [u["sid"] for u in out["unscored"]] == ["s1"]

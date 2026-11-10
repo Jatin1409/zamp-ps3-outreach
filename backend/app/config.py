@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     search_cache_ttl_s: float = 6 * 3600   # reuse identical searches (same query+filters) for 6 hours
     min_s_for_rewrite: float = 22.0        # don't start an optional step that can't finish inside the budget
     min_s_for_regenerate: float = 35.0
+    reserve_for_drafting_s: float = 30.0  # research stages leave this much of the budget for draft + verify
     search_provider: str = "tavily"          # tavily | fixture
     llm_model: str = "claude-opus-5-5"       # drafting / verification
     llm_model_fast: str = "claude-opus-5-5"  # classification / scoring (swap to a cheaper model here)

@@ -161,24 +161,37 @@ async def judge_in_batches(ctx: RunContext, h: StageHandle, *, purpose: str, sys
     """
     got: dict = {}
     todo = list(items)
+    reserve = get_settings().reserve_for_drafting_s
     for attempt in range(reasks + 1):
         if not todo:
             break
         if attempt:
-            if not ctx.can_afford(8):
-                await h.progress(f"{len(todo)} item(s) left unscored to stay within the time limit")
+            # re-asks are optional: only when they can't eat into the time needed to draft and verify
+            if not ctx.can_afford(reserve + 8):
+                await h.progress(f"{len(todo)} item(s) left unscored to keep time for drafting")
                 break
             await h.progress(f"The model skipped {len(todo)} item(s); asking again for just those")
         batches = [todo[i:i + batch_size] for i in range(0, len(todo), batch_size)]
-        # independent batches run concurrently (they were sequential: 2-3 x 5-10 s)
+        wait = ctx.research_wait() if attempt == 0 else min(12.0, ctx.research_wait())
+        # independent batches run concurrently; each is optional - one failed batch doesn't sink the stage
         results = await asyncio.gather(*(ctx.llm_call(h, purpose=purpose, system=system, user=make_user(b),
-                                                       schema=schema, tier="fast") for b in batches))
+                                                       schema=schema, tier="fast", max_wait=wait, optional=True)
+                                         for b in batches))
         for batch, res in zip(batches, results):
+            if res is None:
+                continue
             asked = {it["id"] for it in batch}
             for j in res.data.judgments:
                 if j.sid in asked and j.sid not in got:
                     got[j.sid] = j
         todo = [it for it in todo if it["id"] not in got]
+    if items and not got:
+        # nothing came back at all: one last, required attempt with whatever time is left (fails the stage visibly)
+        res = await ctx.llm_call(h, purpose=purpose, system=system, user=make_user(items[:batch_size]),
+                                 schema=schema, tier="fast")
+        asked = {it["id"] for it in items[:batch_size]}
+        got = {j.sid: j for j in res.data.judgments if j.sid in asked}
+        todo = [it for it in items if it["id"] not in got]
     return got, [it["id"] for it in todo]
 
 

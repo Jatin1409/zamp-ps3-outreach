@@ -283,3 +283,18 @@ def test_birth_details_redacted():
     from app.pipeline.textmatch import redact_personal
     t = redact_personal("Early life\nBrown was born on November 8, 1954, in Guymon, Oklahoma, and studied finance.")
     assert "1954" not in t and "Guymon" not in t
+
+
+@pytest.mark.parametrize("entered,found,ok", [
+    ("Rosenbauer International", "Rosenbauer International AG", True),
+    ("Mercury", "Mercury Technologies Inc.", True),
+    ("OakNorth", "OakNorth Bank plc", True),
+    ("Brightwater Fasteners GmbH", "Brightwater Ltd", False),   # seen live: a fuzzy set-ratio called this a match
+    ("Stark Industries", "Stark Industries", True),
+    ("Canva", "Canvas Inc", False),                             # different companies: short words match exactly
+    ("Rosenbauer Internatonal", "Rosenbauer International AG", True),  # typo in a long word is tolerated
+    ("Dunder Mifflin", "Mifflin Street Partners", False),
+])
+def test_company_matching(entered, found, ok):
+    from app.pipeline.textmatch import company_matches
+    assert company_matches(entered, found) is ok

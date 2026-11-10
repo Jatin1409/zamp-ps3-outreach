@@ -44,6 +44,28 @@ def redact_personal(text: str | None) -> str:
     return _DOB.sub("[personal detail removed]", text or "")
 
 
+_LEGAL = {"inc", "incorporated", "ltd", "limited", "llc", "llp", "plc", "gmbh", "ag", "sa", "sas", "bv", "nv", "co",
+          "corp", "corporation", "company", "group", "holdings", "the", "and", "&", "pvt", "private", "se", "oy", "ab",
+          "kg", "srl", "spa", "pte", "pty"}
+
+
+def company_tokens(name: str) -> list[str]:
+    return [t for t in re.findall(r"[a-z0-9]+", normalize(name)) if t not in _LEGAL]
+
+
+def company_matches(entered: str, found: str) -> bool:
+    """Every significant word the rep typed must appear in the found name (legal suffixes ignored).
+
+    'Rosenbauer International' ~ 'Rosenbauer International AG' (yes); 'Mercury' ~ 'Mercury Technologies Inc.' (yes);
+    'Brightwater Fasteners GmbH' ~ 'Brightwater Ltd' (NO - a fuzzy token-set ratio called this a perfect match)."""
+    a, b = company_tokens(entered), company_tokens(found)
+    if not a or not b:
+        return False
+    def same(t: str, u: str) -> bool:  # short words must match exactly ('canva' is not 'canvas')
+        return t == u if len(t) <= 5 else fuzz.ratio(t, u) >= 90
+    return all(any(same(t, u) for u in b) for t in a)
+
+
 def word_count(text: str) -> int:
     return len(re.findall(r"\b[\w'’-]+\b", text or ""))
 

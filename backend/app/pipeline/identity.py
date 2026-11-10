@@ -13,7 +13,7 @@ from .context import RunContext, update_run
 from .injection import detect_injection
 from .llm_schemas import IdentityExtraction
 from .routing import CandidateView, CompanyView, decide_company, decide_identity, identity_gate
-from .textmatch import normalize, quote_in_text
+from .textmatch import company_matches, normalize, quote_in_text
 
 
 def _verify_evidence(evidence, by_idx: dict) -> tuple[set, list]:
@@ -115,7 +115,8 @@ async def stage_identity(ctx: RunContext, run: Run) -> dict:
         else:
             await h.progress(f"Reading {len(clean)} sources to identify the person and the company")
             res = await ctx.llm_call(h, purpose="identity", system=P.IDENTITY_SYSTEM,
-                                     user=P.identity_user(p, clean), schema=IdentityExtraction, tier="fast")
+                                     user=P.identity_user(p, clean), schema=IdentityExtraction, tier="fast",
+                                     max_wait=ctx.research_wait())
             ext = res.data
         by_idx = {s["id"]: s for s in clean}
 
@@ -126,8 +127,7 @@ async def stage_identity(ctx: RunContext, run: Run) -> dict:
             name_ok = fuzz.token_set_ratio(normalize(c.full_name), normalize(p["name"])) >= 85
             cid = f"c{i + 1}"
             at_input, note = c.at_input_company, None
-            company_ok = not c.current_company or fuzz.token_set_ratio(
-                normalize(c.current_company), normalize(p["company"])) >= 80
+            company_ok = not c.current_company or company_matches(p["company"], c.current_company)
             if at_input == "current" and not company_ok and not c.is_fictional:
                 # model output contradicts itself ("current at X" but current_company = Y): trust neither
                 at_input = "unclear"
@@ -149,7 +149,7 @@ async def stage_identity(ctx: RunContext, run: Run) -> dict:
             for i, co in enumerate(ext.companies):
                 urls, ev_out = _verify_evidence(co.evidence, by_idx)
                 kid = f"k{i + 1}"
-                ok = fuzz.token_set_ratio(normalize(co.name), normalize(p["company"])) >= 80
+                ok = company_matches(p["company"], co.name)
                 comp_views.append(CompanyView(kid, co.name, co.short_label, len(urls), ok, co.is_fictional))
                 comp_out.append({"id": kid, **co.model_dump(exclude={"evidence"}), "evidence": ev_out,
                                  "verified_sources": len(urls), "name_matches": ok})

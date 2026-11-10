@@ -136,6 +136,31 @@ the intended edge case, 0 unsupported claims remained across 19 factual claims i
 generic (2 were regenerated once by the genericness loop), 0 runs failed. Median run ~99 s on free tiers. Each of
 those runs was recorded and replays offline to the identical route in the test suite. Details: `docs/EVAL_RESULTS.md`.
 
+**How did you get runs under 90 seconds?** (iteration 2)
+I measured first. Per-call timings showed the model itself was rarely slow - the time went into fallbacks: every call
+rediscovering an overloaded free-tier model with backoff sleeps, and 8 web searches run one after another. So: a
+circuit breaker (an overloaded model is skipped by every call for 20 s), *hedged* requests (if a model hasn't answered
+in 4 s, ask the next one too and take the first answer), classification never falls back to the slow 20-a-day Flash
+models, searches and scoring batches run in parallel, the swap test runs alongside verification, and identical
+searches are cached for 6 hours. Only then the hard limit: every call gets the remaining time as its deadline, optional
+steps only start if they can finish, and if the limit is still hit you get what's done, clearly marked incomplete.
+
+**What happens when you press Stop?**
+The run's background task is cancelled, which aborts the HTTP calls it's waiting on; a guard stops anything new from
+starting; the stage that was running is marked "stopped", the rest "not run", and everything found so far is kept.
+You can resume from that stage or start fresh. Stopping twice, or stopping a finished run, is harmless.
+
+**What if someone types a fictional character?**
+The identity step asks the model whether sources describe the person or company as fictional, with a quote - and code
+checks the quote is really on the page. If so, nothing is drafted and the screen shows the fiction (with sources)
+separately from what exists in the real world. Example from a live run: "Tony Stark, Stark Industries" - fictional,
+but two real companies called Stark Industries exist; the page says exactly that.
+
+**How do multiple seller profiles stay separate?**
+Each run records which profile it was made under and a copy of that profile's content, so editing or deleting a
+profile never changes history. The dashboard and metrics filter by profile. The selected profile lives in your
+browser and is sent with each request, so two reviewers can use different profiles at the same time.
+
 ## 4. Known weaknesses (say them before they're found)
 
 - Sensitive tagging depends on the classifier: in one live run a "city ponders lawsuit against fire-truck makers"

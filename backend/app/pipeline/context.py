@@ -112,6 +112,11 @@ class RunContext:
     def can_afford(self, seconds: float) -> bool:
         return self.remaining() >= seconds
 
+    def research_wait(self) -> float:
+        """How long a research-stage call may wait while still leaving time to draft and verify afterwards."""
+        spare = self.remaining() - get_settings().reserve_for_drafting_s
+        return max(6.0, spare)
+
     # ------------------------------------------------------------------ stages
     @asynccontextmanager
     async def stage(self, key: str, input_: dict | None = None):
@@ -240,13 +245,20 @@ class RunContext:
             await s.commit()
 
     async def llm_call(self, h: StageHandle, *, purpose: str, system: str, user: str, schema, tier="fast",
-                       max_tokens: int = 8000) -> LLMResult:
+                       max_tokens: int = 8000, max_wait: float | None = None,
+                       optional: bool = False) -> LLMResult | None:
+        """max_wait caps this call below the run's remaining time (used to keep time in reserve for drafting).
+        optional=True: a failure is recorded and None returned - the stage carries on with what it has."""
         t0 = time.monotonic()
         try:
-            res, _ = await self.llm_raw(purpose=purpose, system=system, user=user, schema=schema, tier=tier,
-                                        max_tokens=max_tokens)
+            self.check()
+            limit = self._llm_timeout() if max_wait is None else max(1.0, min(max_wait, self._llm_timeout()))
+            res = await self.llm.complete(purpose=purpose, system=system, user=user, schema=schema, tier=tier,
+                                          max_tokens=max_tokens, timeout=limit)
         except LLMError as e:
             await self.record_llm_failure(h, purpose, e, t0)
+            if optional:
+                return None
             if e.kind == "timeout" and self.remaining() < 3:
                 # the run's own budget ran out mid-call: treat as the time limit, not a provider fault
                 self.interrupt("timeout")

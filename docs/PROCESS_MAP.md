@@ -33,6 +33,12 @@ cost. Every status change is written to an event log that the UI streams over Se
   - `role_conflict` — the best candidate matches the name, but recent evidence says they *left* the input
     company or now hold a different role / company.
   - `not_found` — no source mentions this person with this company. Confidence low; company research continues.
+- **Also (iteration 2):** a company-only search runs in parallel; the model lists matching organisations and says
+  whether any person or company is described as **fictional** (with quotes; code verifies them). Code then decides:
+  `fictional` (stop, show verified fiction separately from real-world facts), `ambiguous_company` (pause: which
+  organisation?), `nothing_found` (neither person nor company in any source: stop and list what was checked).
+  A **"What we could verify"** checklist (person / employer / role / company / person-level signal / company news) is
+  stored on every run.
 - **Decision point A (identity gate):**
   - ambiguous → **pause** (`ask_rep`). UI shows candidates with evidence; rep picks one or stops.
   - role_conflict → **pause** (`ask_rep`). UI shows input vs. evidence; rep chooses *continue with new details*,
@@ -111,6 +117,17 @@ cost. Every status change is written to an event log that the UI streams over Se
 - R3 drafts cannot be approved until the rep ticks the sensitive-signal acknowledgement.
 - Stored: original draft, every version, final text, action, who/when.
 
+## 2b. Time budget and stopping (iteration 2)
+- **Budget:** 90 s of active execution per run (pauses for the rep don't count; regenerate/retry get a fresh 90 s).
+  Every model/search call gets the remaining time as its deadline; optional steps (lint retry, claim rewrite,
+  genericness regeneration) only start if they can finish. If the limit is reached: a draft that exists goes to review
+  marked incomplete (approval needs an acknowledgement); otherwise the run ends `timed_out` with results kept.
+- **Stop:** available while queued, running or paused. Cancels the job's task (in-flight provider calls are aborted),
+  nothing new starts, the running stage is marked `cancelled`, later stages `skipped`, results so far kept. Resume from
+  the stopped stage, or start a fresh run.
+- **Speed:** searches and scoring batches run in parallel; the swap test runs alongside verification; model calls are
+  hedged and overloaded models are skipped for a short cool-down; identical searches are cached for 6 h.
+
 ## 3. Decision points summary
 - **A — identity gate** (after stage 1): continue / pause for candidate choice / pause for role conflict.
 - **B — route** (stage 5): draft / draft_with_warning / do_not_draft (+ ask_rep recorded at A).
@@ -147,6 +164,9 @@ flowchart TD
     S1[1. Resolve identity<br/>search + LLM candidate extraction<br/>code assigns status + confidence] --> A{A. Identity gate}
     A -- ambiguous --> P1[/Pause: rep picks a candidate/]
     A -- role conflict --> P2[/Pause: continue with new details,<br/>original details, or stop/]
+    A -- fictional / nothing found --> NOPE([Stop: say what is real, what is fiction, what is missing])
+    A -- ambiguous company --> P3[/Pause: which organisation?/]
+    P3 -- picked --> S2
     A -- resolved / not found --> S2
     P1 -- picked --> S2
     P2 -- continue --> S2

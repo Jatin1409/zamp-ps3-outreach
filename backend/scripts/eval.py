@@ -41,7 +41,7 @@ def run_scenario(c: httpx.Client, sc: dict, mode: str) -> dict:
     r = c.post("/api/runs", json={"prospect": sc["prospect"], "mode": mode, "scenario_key": sc["key"]})
     r.raise_for_status()
     rid = r.json()["id"]
-    d = wait(c, rid, ("awaiting_rep", "awaiting_review", "completed", "failed"))
+    d = wait(c, rid, ("awaiting_rep", "awaiting_review", "completed", "failed", "timed_out", "cancelled"))
     paused_as = d["pause"]["kind"] if d["status"] == "awaiting_rep" else None
     if d["status"] == "awaiting_rep":
         dec = dict(sc.get("eval_decision") or {"choice": "stop"})
@@ -49,7 +49,7 @@ def run_scenario(c: httpx.Client, sc: dict, mode: str) -> dict:
             cands = d["pause"]["candidates"]
             dec = {"choice": "pick", "candidate_id": max(cands, key=lambda x: x["verified_sources"])["id"]}
         c.post(f"/api/runs/{rid}/decision", json=dec).raise_for_status()
-        d = wait(c, rid, ("awaiting_review", "completed", "failed"))
+        d = wait(c, rid, ("awaiting_review", "completed", "failed", "timed_out", "cancelled"))
     last = d["drafts"][-1] if d["drafts"] else None
     claims = (last or {}).get("verification", {}) or {}
     facts = [x for x in claims.get("claims", []) if x["kind"].endswith("fact")]

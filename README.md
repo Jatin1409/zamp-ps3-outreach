@@ -27,6 +27,12 @@ draft ready to copy.
 | 8 | Genericness | Deterministic rule + swap test against two decoy prospects | regenerate once, then flag |
 | 9 | Review | Approve / edit / reject / regenerate | **The rep** |
 
+**Also:** multiple **seller profiles** (create / edit / duplicate / delete / switch; runs and metrics are kept per
+profile), a prominent **Stop** that aborts a run mid-stage, a hard **90-second budget** per run that returns partial
+results clearly marked as incomplete, an explicit **"What we could verify"** checklist on every run, detection of
+**fictional characters / companies**, **ambiguous company names** and **people or companies that can't be found**, and
+an **About** page.
+
 **Edge cases, each a deliberate route with its own screen:** ambiguous identity (pause, pick a candidate),
 outdated role (pause, show the conflict, never overwrite the input), thin signal (company-level fallback labelled
 "lower personalisation", else "do not send" with what's missing), sensitive signal (never a cheerful hook; adapt
@@ -47,6 +53,10 @@ React (Vite, TS) ──HTTP/SSE──▶ FastAPI ──▶ Postgres (runs, stage
 - **Replay mode** re-uses search results saved from an earlier live run of the same prospect (labelled on screen and
   stored on the run). Live is the default; a live search failure fails the stage and offers "Retry in replay mode".
 - **Access code + rate limits** (per network per hour, global per day, concurrent runs) protect the public link.
+- **Speed:** searches and scoring batches run in parallel, the swap test runs alongside verification, model calls are
+  hedged (a slow model is raced against the next one) behind a circuit breaker, and identical searches are cached for
+  6 h. **Budget:** 90 s of active time per run, enforced on every call; optional steps only start if they can finish.
+- **Stop:** cancels the run's task (in-flight provider calls are aborted); results so far are kept.
 
 Code map: `backend/app/pipeline/` (`stages.py` stages, `scoring.py` formula, `routing.py` rules, `textmatch.py` quote
 check, `injection.py` defences, `prompts.py`, `llm_schemas.py`), `backend/app/providers/` (LLM + search),
@@ -108,6 +118,11 @@ Runs every sample scenario live, checks it took its designed route, and writes `
 | `ACCESS_CODE` | `local-dev` | required for every API call |
 | `RUNS_PER_HOUR_PER_CLIENT` / `RUNS_PER_DAY_GLOBAL` / `MAX_CONCURRENT_RUNS` | 15 / 150 / 3 | abuse limits |
 | `WORKER_ENABLED` | `true` | set `false` and run `python -m app.worker` to split the worker out |
+| `RUN_BUDGET_S` | `90` | hard limit on active execution time per run |
+| `LLM_ATTEMPT_TIMEOUT_FAST_S` / `..._DRAFT_S` | `10` / `20` | one model attempt before moving on |
+| `LLM_HEDGE_AFTER_FAST_S` / `..._DRAFT_S` | `4` / `9` | when to race a slow model against the next one |
+| `MODEL_COOLDOWN_S` | `20` | how long an overloaded model is deprioritised |
+| `SEARCH_CACHE_TTL_S` | `21600` | reuse identical searches for this long (0 = off) |
 
 ## Deployment (Render)
 
@@ -128,6 +143,11 @@ or connect the GitHub app in Render to get deploy-on-push.
 - **Thresholds are hand-tuned** on a small set of live runs; they'd need tuning on real rep feedback.
 - **Single shared access code**, no per-user accounts; one seller profile.
 - **Edited text is not re-fact-checked** (the UI says so).
+- **The 90 s budget depends on the free Gemini tier's health.** On bad days some runs reach the limit and return an
+  incomplete (clearly flagged) draft; see `docs/EVAL_RESULTS.md` for measured timings.
+- **Seller profiles are shared** by everyone with the access code (no per-user ownership).
+- **Fiction detection relies on public pages saying so** (e.g. "is a fictional character"); an obscure fictional name
+  with no such page is treated as "not found", which also stops the run.
 - **Public facts drift:** sample scenarios were verified on the dates in `docs/EVAL_RESULTS.md`; re-run the eval
   before a demo.
 - Costs shown are estimates from published prices (currently $0 on free tiers), not invoices.
