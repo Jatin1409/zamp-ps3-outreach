@@ -139,3 +139,6 @@ body { text-rendering: optimizeLegibility; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
+
+/* long unbroken names/companies must wrap, never overflow on phones */
+h1, h2, h3, .run-head .muted, .profile-meta strong, .menu-text strong, .email-body, .quote { overflow-wrap: anywhere; }

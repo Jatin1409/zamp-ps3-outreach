@@ -7,7 +7,7 @@ from app.pipeline.injection import detect_injection, escape_for_prompt
 from app.pipeline.lint import lint_draft
 from app.pipeline.scoring import (combine, credibility_score, explain_ranking, parse_date, recency_score,
                                   score_signal)
-from app.pipeline.stages import mask, seller_source_text
+from app.pipeline.stages import mask
 from app.pipeline.textmatch import quote_in_text
 
 TODAY = dt.date(2026, 11, 1)
@@ -211,13 +211,6 @@ def test_quote_rejects_fabrication():
     assert not quote_in_text("$90M", src)[0]           # short strings must match exactly
     assert not quote_in_text("", src)[0]
     assert not quote_in_text("anything at all here", None)[0]
-
-
-def test_seller_source_text():
-    seller = {"proof_points": ["A", "B"], "product": "P"}
-    assert seller_source_text(seller, "seller.proof_points") == "A\nB"
-    assert seller_source_text(seller, "seller.product") == "P"
-    assert seller_source_text(seller, "seller.nope") is None
 
 
 def test_mask_names():

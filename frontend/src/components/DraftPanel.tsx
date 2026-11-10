@@ -78,7 +78,7 @@ export default function DraftPanel({ run, onDone }: { run: RunDetail; onDone: ()
     try { await navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ }
   };
   const ver = d.verification;
-  const incomplete = !ver || !!(run.interrupted?.incomplete?.length);
+  const incomplete = !!(run.interrupted?.incomplete?.length);
   const gen = d.genericness;
   const finalReview = [...run.reviews].reverse().find((r) => r.action === "approve" || r.action === "reject");
 
@@ -88,7 +88,7 @@ export default function DraftPanel({ run, onDone }: { run: RunDetail; onDone: ()
       {needsAck && <div className="callout bad"><ShieldAlert size={16} /><div><strong>Sensitive situation.</strong> Recent news about {run.prospect.company} is sensitive ({sensSig?.sensitive?.category?.replace("_", " ")}{sensSig ? <>: <a href={sensSig.url} target="_blank" rel="noreferrer">{sensSig.title}</a></> : null}). It was not used as a hook and the tone was adapted. Read carefully before approving.</div></div>}
       {route.sensitive_mode === "avoided" && <div className="callout info"><ShieldAlert size={16} /><div>A sensitive item ({sensSig?.sensitive?.category?.replace("_", " ")}) was deliberately <strong>not</strong> used as the hook; the draft uses the best safe alternative.</div></div>}
       {incomplete && <div className="callout bad"><AlertTriangle size={16} /><div><strong>Incomplete draft.</strong> {run.interrupted?.message}{" "}
-        {!ver ? "Its claims were NOT fact-checked — treat every statement as unverified." : "Some checks did not run."} Regenerate it, or read it
+        The genericness check did not run. Regenerate it, or read it
         carefully before approving.</div></div>}
       {ver && ver.unsupported > 0 && <div className="callout bad"><XCircle size={16} /><div><strong>{ver.unsupported} claim{ver.unsupported > 1 ? "s" : ""} could not be verified</strong> after {ver.rounds} rewrite{ver.rounds === 1 ? "" : "s"}. Remove or fix {ver.unsupported > 1 ? "them" : "it"} before using this draft.</div></div>}
       {gen?.generic && <div className="callout warn"><AlertTriangle size={16} /><div><strong>Reads as generic.</strong> {gen.reasons.join(" ")}</div></div>}
@@ -105,7 +105,7 @@ export default function DraftPanel({ run, onDone }: { run: RunDetail; onDone: ()
         {editing ? (
           <div className="stack">
             <label className="field">Subject<input className="input" value={subject} onChange={(e) => setSubject(e.target.value)} /></label>
-            <label className="field">Body <span className="hint">{words}/120 words · your edits are saved with the original kept for comparison. Edited text is not re-fact-checked.</span>
+            <label className="field">Body <span className="hint">{words}/120 words · your edits are saved with the original kept for comparison.</span>
               <textarea className="textarea" style={{ minHeight: 240 }} value={body} onChange={(e) => setBody(e.target.value)} /></label>
           </div>
         ) : (
@@ -116,7 +116,7 @@ export default function DraftPanel({ run, onDone }: { run: RunDetail; onDone: ()
         )}
         {incomplete && open && (
           <label className="check callout neutral"><input type="checkbox" checked={ackIncomplete} onChange={(e) => setAckIncomplete(e.target.checked)} />
-            <span>I understand this draft was not fully checked and I've verified its facts myself.</span></label>
+            <span>I understand this draft is incomplete and I've reviewed it myself.</span></label>
         )}
         {needsAck && open && (
           <label className="check callout neutral"><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />

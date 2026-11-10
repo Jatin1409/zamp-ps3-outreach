@@ -192,7 +192,7 @@ export default function RunView() {
           <VerificationChecklist run={run} />
           {hasResults && <>
             <div className="tabs" role="tablist">
-              {run.drafts.length > 0 && <button className={tab === "draft" ? "on" : ""} onClick={() => setTab("draft")}>Draft & fact check</button>}
+              {run.drafts.length > 0 && <button className={tab === "draft" ? "on" : ""} onClick={() => setTab("draft")}>Draft</button>}
               <button className={tab === "signals" ? "on" : ""} onClick={() => setTab("signals")}>Signals & ranking</button>
               <button className={tab === "identity" ? "on" : ""} onClick={() => setTab("identity")}>Identity</button>
               {(run.drafts.length > 1 || run.reviews.length > 0) && <button className={tab === "history" ? "on" : ""} onClick={() => setTab("history")}>History</button>}

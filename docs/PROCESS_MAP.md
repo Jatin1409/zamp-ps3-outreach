@@ -97,21 +97,17 @@ cost. Every status change is written to an event log that the UI streams over Se
 - **Code lint:** word count, banned phrases, exclamation marks, number of asks. One automatic retry with the lint
   errors; if it still fails the issues become warnings.
 
-### Stage 7 — Verify
-- **LLM** splits the draft into atomic factual claims and, for each, cites a source (`signal_id` or
-  `seller_profile.<field>`) and a verbatim supporting quote.
-- **Code** checks each quote actually appears in the stored source text (fuzzy match ≥ 90). Claim = supported only
-  if the quote is found **and** the LLM judges it entails the claim.
-- Unsupported claims → LLM rewrites the draft removing/softening them → re-verify. Max **2** rewrite rounds.
-- Still unsupported → continue to review with a red warning listing each unsupported claim.
+### ~~Stage 7 — Verify~~ (removed in iteration 3, D26)
+Claim-by-claim verification was removed at the owner's request. What still grounds the draft: identity evidence is
+quote-checked (stage 1), every hook's key fact must be a quote code finds in the stored source or the signal is not
+eligible as a hook (stage 4), and the drafter only sees the chosen hook, two supporting signals and the seller profile.
 
-### Stage 8 — Genericness check
-- **Code:** a draft with zero verified prospect-specific claims is generic by definition.
+### Stage 7 — Genericness check
 - **LLM swap test:** names are masked and the draft is tested against two decoy prospects (different role, industry
   and company). If it still makes sense for a decoy, it is generic.
-- Generic → regenerate once (stages 6–8). Still generic → flag in review.
+- Generic → regenerate once (stages 6–7). Still generic → flag in review.
 
-### Stage 9 — Human review (run pauses: `awaiting_review`)
+### Stage 8 — Human review (run pauses: `awaiting_review`)
 - Rep actions: **approve** (marks *ready to copy* — nothing is sent), **edit** (stores final text, edit distance),
   **reject** (with reason), **regenerate** (new draft from the same evidence, optional instruction).
 - R3 drafts cannot be approved until the rep ticks the sensitive-signal acknowledgement.
@@ -119,26 +115,26 @@ cost. Every status change is written to an event log that the UI streams over Se
 
 ## 2b. Time budget and stopping (iteration 2)
 - **Budget:** 90 s of active execution per run (pauses for the rep don't count; regenerate/retry get a fresh 90 s).
-  Every model/search call gets the remaining time as its deadline; optional steps (lint retry, claim rewrite,
-  genericness regeneration) only start if they can finish. If the limit is reached: a draft that exists goes to review
+  Every model/search call gets the remaining time as its deadline; optional steps (lint retry, genericness
+  regeneration) only start if they can finish. If the limit is reached: a draft that exists goes to review
   marked incomplete (approval needs an acknowledgement); otherwise the run ends `timed_out` with results kept.
 - **Stop:** available while queued, running or paused. Cancels the job's task (in-flight provider calls are aborted),
   nothing new starts, the running stage is marked `cancelled`, later stages `skipped`, results so far kept. Resume from
   the stopped stage, or start a fresh run.
-- **Speed:** searches and scoring batches run in parallel; the swap test runs alongside verification; model calls are
+- **Speed:** searches and scoring batches run in parallel; each search has its own ~18 s cap (8 s per attempt, one quick retry) and one failed search
+  doesn't sink the stage (all failing does); model calls are
   hedged and overloaded models are skipped for a short cool-down; identical searches are cached for 6 h.
 
 ## 3. Decision points summary
 - **A — identity gate** (after stage 1): continue / pause for candidate choice / pause for role conflict.
 - **B — route** (stage 5): draft / draft_with_warning / do_not_draft (+ ask_rep recorded at A).
-- **C — verification loop** (stage 7): supported → continue; unsupported → rewrite (≤ 2) → warn.
-- **D — genericness loop** (stage 8): specific → continue; generic → regenerate once → flag.
-- **E — review** (stage 9): approve / edit / reject / regenerate.
+- **D — genericness loop** (stage 7): specific → continue; generic → regenerate once → flag.
+- **E — review** (stage 8): approve / edit / reject / regenerate.
 
 ## 4. Failure paths
 | Failure | Behaviour |
 |---|---|
-| Search provider down / timeout | Retries (2, exp. backoff, 20 s timeout). Stage marked **failed** with the error. Run status `failed`. UI: Retry / Retry in replay mode. |
+| Search provider down / timeout | 1 quick retry, 8 s per attempt (hard cap); a single failed search is skipped (logged on the stage); if all fail: Stage marked **failed** with the error. Run status `failed`. UI: Retry / Retry in replay mode. |
 | LLM timeout / 5xx / 429 | SDK retries + our retry (2). Then stage **failed**. Never shown as success. |
 | LLM returns invalid JSON / schema violation | Re-asked once with the validation error. Then stage **failed**. |
 | LLM refusal | Stage **failed** with "model declined" message. |
@@ -149,8 +145,7 @@ cost. Every status change is written to an event log that the UI streams over Se
 
 ## 5. What comes out
 - A run record: inputs, seller-profile snapshot, mode, every stage (I/O, timing, status, explanation), all signals
-  with sources, ranking with score breakdown, route path, draft versions, claim-by-claim verification linked to
-  sources, genericness result, warnings, tokens, estimated cost, duration, review action and final text.
+  with sources, ranking with score breakdown, route path, draft versions, genericness result, warnings, tokens, estimated cost, duration, review action and final text.
 - Run outcomes: `approved`, `approved_with_edits`, `rejected`, `not_drafted`, `stopped_by_rep`, `failed`,
   or still open (`running`, `awaiting_rep`, `awaiting_review`).
 - **Nothing is ever sent.** Approval only marks the draft *ready to copy*.
@@ -181,13 +176,10 @@ flowchart TD
 
     B -- nothing usable --> ND([Do not draft<br/>explain what is missing])
     B -- draft / draft with warning --> S6
-    S6[6. Draft<br/>≤120 words, one ask, lint] --> S7
-    S7[7. Verify claims vs stored source text] --> C{C. All supported?}
-    C -- no, rounds < 2 --> RW[Rewrite unsupported claims] --> S7
-    C -- yes / rounds exhausted + warning --> S8
-    S8[8. Genericness swap test] --> D{D. Generic?}
+    S6[6. Draft<br/>≤120 words, one ask, lint] --> S8
+    S8[7. Genericness swap test] --> D{D. Generic?}
     D -- yes, first time --> S6
-    D -- no / flagged --> R[/9. Human review/]
+    D -- no / flagged --> R[/8. Human review/]
     R -- approve --> OK([Ready to copy — never sent])
     R -- edit --> OK
     R -- reject --> REJ([Rejected])

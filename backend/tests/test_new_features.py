@@ -141,12 +141,12 @@ async def test_cancel_during_a_stage_stops_and_keeps_results(client, base):
     assert time.monotonic() - t0 < 2.5            # did not wait for the 3 s model call
     assert d["status"] == "cancelled" and d["outcome"] == "cancelled"
     assert stage(d, "draft")["status"] == "cancelled"
-    assert all(stage(d, k)["status"] == "skipped" for k in ("verify", "generic", "review"))
+    assert all(stage(d, k)["status"] == "skipped" for k in ("generic", "review"))
     assert stage(d, "rank")["status"] == "succeeded" and d["signals"]   # earlier results preserved
     assert d["interrupted"]["reason"] == "user" and d["interrupted"]["stage"] == "draft"
     assert not any(s["status"] == "running" for s in d["stages"])
     # nothing new started after the stop
-    assert all(c["purpose"] != "verify" for c in d["llm_call_log"])
+    assert all(c["purpose"] != "generic" for c in d["llm_call_log"])
     # a fresh run can be started afterwards
     r = await client.post(f"/api/runs/{rid}/rerun", headers=H)
     assert r.status_code == 200 and r.json()["id"] != rid
@@ -206,7 +206,7 @@ async def test_cancel_during_regenerate_keeps_previous_draft(client, base):
     await worker
     d = await get(client, rid)
     assert d["status"] == "awaiting_review" and len(d["drafts"]) == 1   # previous draft kept
-    assert d["drafts"][0]["verification"]["passed"]
+    assert d["drafts"][0]["genericness"] is not None
 
 
 # =============================================================== 90-second budget
@@ -226,17 +226,17 @@ async def test_time_limit_before_a_draft_exists(client, base, monkeypatch):
     assert r.status_code == 200
 
 
-async def test_time_limit_during_verification_returns_flagged_draft(client, base, monkeypatch):
+async def test_time_limit_after_drafting_returns_flagged_draft(client, base, monkeypatch):
     monkeypatch.setattr(get_settings(), "run_budget_s", 1.5)
     fx = copy.deepcopy(base)
-    fx["llm_delay_s"] = {"verify": 5}
+    fx["llm_delay_s"] = {"generic": 5}
     rid = await create(client, fx)
     await jobs.drain()
     d = await get(client, rid)
     assert d["status"] == "awaiting_review"
-    assert stage(d, "verify")["status"] == "timed_out"
-    assert d["drafts"] and d["drafts"][-1]["verification"] is None
-    assert "NOT fact-checked" in " ".join(d["warnings"])
+    assert stage(d, "generic")["status"] == "timed_out"
+    assert d["drafts"] and d["drafts"][-1]["genericness"] is None
+    assert "genericness check did not run" in " ".join(d["warnings"])
     # can't approve an unchecked draft without acknowledging it
     r = await client.post(f"/api/runs/{rid}/review", json={"action": "approve"}, headers=H)
     assert r.status_code == 400
@@ -420,10 +420,6 @@ async def test_verification_checklist_reports_what_could_not_be_verified(client,
     assert checks["company"] == "verified" and checks["company_news"] == "verified"
     assert checks["person_signal"] == "not_verified"
     assert d["personalisation"] == "company"
-    # no claim about the person survives verification
-    claims = d["drafts"][-1]["verification"]["claims"]
-    assert not [c for c in claims if c["kind"] == "prospect_fact" and c["supported"]
-                and c.get("source_id") == "s2"]
 
 
 async def test_fictional_person_with_real_namesake_company_is_described_accurately(client, base):

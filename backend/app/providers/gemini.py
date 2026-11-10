@@ -266,7 +266,7 @@ class GeminiLLM:
                 raise LLMError(f"Gemini API error {code}: {str(e)[:300]}", kind="provider_error") from e
             except (asyncio.TimeoutError, TimeoutError) as e:
                 _mark_cooling(model, s.model_cooldown_s)
-                skipped.append(f"{model} (no answer in {min(per_attempt, left()):.0f} s)")
+                skipped.append(f"{model} (no answer in {max(0.0, min(per_attempt, left())):.0f} s)")
                 if mi + 1 < len(models):
                     mi += 1
                     continue

@@ -50,7 +50,8 @@ _LEGAL = {"inc", "incorporated", "ltd", "limited", "llc", "llp", "plc", "gmbh", 
 
 
 def company_tokens(name: str) -> list[str]:
-    return [t for t in re.findall(r"[a-z0-9]+", normalize(name)) if t not in _LEGAL]
+    # split on whitespace/punctuation only, so any script works (e.g. Devanagari company names)
+    return [t for t in re.split(r"[\s,.;:()/&+\-]+", normalize(name)) if t and t not in _LEGAL]
 
 
 def company_matches(entered: str, found: str) -> bool:

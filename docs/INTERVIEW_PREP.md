@@ -8,7 +8,7 @@
 > from. If it can't find anything real, it tells the rep that instead of making something up. A person always
 > approves before anything goes out — the tool can't send email at all.
 
-What the buyer gets: research time per prospect drops from ~20 minutes to ~1 minute of review; every claim is
+What the buyer gets: research time per prospect drops from ~20 minutes to ~1 minute of review; every hook is
 traceable to a link; the awkward failures (wrong person, someone who left, writing the day after layoffs) are caught
 and put in front of the rep instead of going out.
 
@@ -25,8 +25,8 @@ nothing found → continue at company level with low confidence.
 
 **Stage 2 — Collect.** Five searches: interviews/talks/quotes by the person, recent mentions, and company news from
 the last 12 months (funding, hiring, launches, partnerships, finance). LinkedIn and people-data brokers are excluded
-at the search level. Every result is saved with its URL, date, full text and type — that saved copy is what later
-proves or disproves each claim, and what replay mode reuses.
+at the search level. Every result is saved with its URL, date, full text and type — that saved copy is what the hook's
+key fact is checked against, and what replay mode reuses.
 
 **Stage 3 — Clean up.** Code removes duplicates and anything older than 18 months, and quarantines any page that
 contains instructions aimed at an AI. The AI labels each remaining item: about this person, about this company, or
@@ -48,12 +48,10 @@ with a warning. Otherwise → normal draft.
 hypothesis, at most one proof point copied from the seller profile, one low-friction ask. Code checks length,
 banned phrases ("I came across", "congrats", "quick call"…), exclamation marks and number of questions.
 
-**Stage 7 — Fact-check.** The AI splits the email into individual claims and, for each, names its source and copies
-the supporting sentence. Code checks the sentence is really in the saved source. Anything unsupported → the AI
-rewrites without it → check again (twice at most) → anything left is shown in red for the rep.
+**(Fact-check stage removed.)** It used to split the email into claims and check each quote; it was dropped at the
+owner's request (D26). The hook's key fact is still quote-checked before drafting.
 
-**Stage 8 — Is it generic?** If no verified fact about this prospect survives, it's generic by definition.
-Otherwise names are blanked out and the AI is asked whether the email would still work for two unrelated decoy
+**Stage 7 — Is it generic?** Names are blanked out and the AI is asked whether the email would still work for two unrelated decoy
 prospects. If yes → regenerate once → still yes → flagged.
 
 **Stage 9 — The rep.** Approve (ready to copy), edit (original kept, edit size recorded), reject, or regenerate with an
@@ -71,13 +69,14 @@ the system takes can be traced to a numbered rule, and the rules are unit-tested
 I can replay a recorded live run and get the same route.
 
 **How do you stop it making things up?**
-Three ways. The AI only ever sees saved source text, not its own memory. Every factual claim must come with a quote,
-and code — not the AI — checks the quote is on the page. And claims that fail are removed or shown in red. The seller's
-own proof points can only be quoted word-for-word from the seller profile.
+The AI only ever sees saved source text, not its own memory. Identity evidence and the hook's key fact must come with a
+quote, and code — not the AI — checks the quote is on the page; a hook whose fact can't be found isn't eligible. The
+drafter is given only the hook, two supporting signals and the seller profile. Honest gap: since the claim-by-claim
+check was removed (owner's call), a slip in the email's own wording is caught by the rep, not by code.
 
 **What if the AI hallucinates the quote too?**
 That's exactly what the code check catches: the quote has to be found in the stored page text (near-exact match).
-A made-up quote isn't on the page, so the claim fails.
+A made-up quote isn't on the page, so that evidence (or that hook) is rejected.
 
 **What's the weakest part?**
 Person-level signal. Without LinkedIn, many mid-level prospects have nothing public, so the thin-signal route is common.
@@ -105,8 +104,8 @@ namesakes are now checked before "has this person moved?".
 
 **How is it protected against prompt injection?**
 Detector quarantines pages with instructions aimed at an AI; all web text is fenced and escaped so it can't break out
-of its "this is data" wrapper; outputs are strict schemas with no tools; and the fact-check means an injected "say you
-met at a conference" can't survive into a verified draft. There's a test for each layer.
+of its "this is data" wrapper; outputs are strict schemas with no tools; and the drafter only sees the chosen hook and two
+supporting signals, so injected text has little room to reach the email. There's a test for each layer.
 
 **What happens if search or the AI is down during the demo?**
 The stage turns red with the error — it never pretends to succeed. Search failures offer "Retry in replay mode",
@@ -141,7 +140,7 @@ I measured first. Per-call timings showed the model itself was rarely slow - the
 rediscovering an overloaded free-tier model with backoff sleeps, and 8 web searches run one after another. So: a
 circuit breaker (an overloaded model is skipped by every call for 20 s), *hedged* requests (if a model hasn't answered
 in 4 s, ask the next one too and take the first answer), classification never falls back to the slow 20-a-day Flash
-models, searches and scoring batches run in parallel, the swap test runs alongside verification, and identical
+models, searches and scoring batches run in parallel, each search has its own ~18 s cap (8 s per attempt, one quick retry), and identical
 searches are cached for 6 hours. Only then the hard limit: every call gets the remaining time as its deadline, optional
 steps only start if they can finish, and if the limit is still hit you get what's done, clearly marked incomplete.
 
@@ -167,7 +166,7 @@ browser and is sent with each request, so two reviewers can use different profil
   item wasn't tagged (it wasn't the hook, so no harm — but the safety net is only as good as that judgement).
 - Runs take 1–3 minutes on free tiers (call spacing, fallbacks, regenerations).
 - Thin person-level signal without LinkedIn (by design).
-- Quote matching can reject a correct paraphrase (errs toward removing claims).
+- No claim-by-claim check of the email text (removed, D26) - the rep is the check.
 - Thresholds tuned on a small set; no learning from rep edits yet.
 - Free-tier constraints: cold start ~50 s, Gemini quotas, Google may use free-tier prompts, free Postgres expires 2026-12-04.
 - One shared access code; no per-user accounts or audit of who approved.
@@ -181,6 +180,6 @@ browser and is sent with each request, so two reviewers can use different profil
 2. **Batch mode:** CSV of prospects → queue → morning review list sorted by confidence.
 3. **CRM in, CRM out:** pull prospect + history from the CRM (with consent) and write the approved draft back as a task
    — still no auto-send.
-4. **Re-verify edits** and highlight any new unsupported claim the rep typed.
+4. **Bring back an optional fact-check** (claims → quotes) as a toggle, off by default for speed.
 5. **Per-user auth + audit trail** (who approved what, when).
-6. **Paid model tier for verification** if eval shows the free model missing claims.
+6. **Paid model tier for drafting** for steadier latency than the free tier.

@@ -27,7 +27,6 @@ STAGES: list[tuple[str, str]] = [
     ("rank", "Rank signals"),
     ("route", "Choose route"),
     ("draft", "Write draft"),
-    ("verify", "Verify claims"),
     ("generic", "Genericness check"),
     ("review", "Human review"),
 ]
@@ -113,7 +112,7 @@ class RunContext:
         return self.remaining() >= seconds
 
     def research_wait(self) -> float:
-        """How long a research-stage call may wait while still leaving time to draft and verify afterwards."""
+        """How long a research-stage call may wait while still leaving time to draft afterwards."""
         spare = self.remaining() - get_settings().reserve_for_drafting_s
         return max(6.0, spare)
 
@@ -281,7 +280,9 @@ class RunContext:
             return None
         return [SearchResult(**r) for r in row.results]
 
-    async def search_call(self, h: StageHandle, q: SearchQuery) -> list[SearchResult]:
+    async def search_call(self, h: StageHandle, q: SearchQuery, optional: bool = False) -> list[SearchResult]:
+        """optional=True: a failed or stalled search is logged and returns [] so the stage continues with the
+        other searches (seen live: one stalled search held a whole stage for 58 s)."""
         self.check()
         cached = await self._cached(q)
         if cached is not None:
@@ -289,12 +290,22 @@ class RunContext:
             self.search_cache_hits += 1
         else:
             from_cache = False
+            # one search never holds a stage longer than about one attempt + a quick retry (live: 53 s before)
+            cfg = get_settings()
+            cap = cfg.search_timeout_s * (cfg.search_retries + 1) + 2 if optional else self.research_wait()
+            limit = max(1.0, min(cap, self.research_wait(), self.remaining() - 1))
             try:
-                results = await asyncio.wait_for(self.search.search(q), timeout=max(1.0, self.remaining() - 1))
+                results = await asyncio.wait_for(self.search.search(q), timeout=limit)
             except asyncio.TimeoutError as e:
+                if optional:
+                    h.meta.setdefault("search_failures", []).append(f"{q.query} (no answer in {limit:.0f} s)")
+                    return []
                 self.interrupt("timeout")
                 raise asyncio.CancelledError("timeout") from e
             except SearchError as e:
+                if optional and e.kind not in ("config", "quota"):
+                    h.meta.setdefault("search_failures", []).append(f"{q.query} ({e.kind})")
+                    return []
                 raise StageFailed(f"Web search failed ({e.kind}): {e}", kind=f"search_{e.kind}") from e
         for r in results:  # never store or pass on birth dates / birthplaces, even from public pages
             r.content = redact_personal(r.content)
@@ -321,4 +332,11 @@ class RunContext:
     async def search_many(self, h: StageHandle, queries: list[SearchQuery]) -> list[list[SearchResult]]:
         """Independent searches run concurrently (was the largest fixed cost: 5 sequential calls)."""
         await h.progress(f"Running {len(queries)} searches in parallel")
-        return list(await asyncio.gather(*(self.search_call(h, q) for q in queries)))
+        out = list(await asyncio.gather(*(self.search_call(h, q, optional=True) for q in queries)))
+        failures = h.meta.get("search_failures", [])
+        if failures and len(failures) == len(queries):
+            raise StageFailed("Web search failed: none of the searches answered (" + "; ".join(failures[:2]) + ")",
+                              kind="search_unavailable")
+        if failures:
+            await h.progress(f"{len(failures)} search(es) didn't answer in time; continuing with the rest")
+        return out

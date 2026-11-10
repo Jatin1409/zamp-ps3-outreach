@@ -64,9 +64,8 @@ async def test_happy_then_approve_with_edit(client, base):
     rid, d = await run(client, base)
     assert d["status"] == "awaiting_review" and d["final_route"] == "draft"
     draft = d["drafts"][-1]
-    claims = draft["verification"]["claims"]
-    assert all(c["supported"] for c in claims)
-    assert any(c.get("url", "").startswith("https://") for c in claims if c["kind"] == "prospect_fact")
+    assert draft["hook_signal_id"] == "s2" and draft["genericness"]["generic"] is False
+    assert not any(s["key"] == "verify" for s in d["stages"])   # stage removed
     r = await client.post(f"/api/runs/{rid}/review", headers=H,
                           json={"action": "edit", "subject": draft["subject"], "body": draft["body"] + "\nP.S."})
     assert r.status_code == 200
@@ -212,36 +211,7 @@ async def test_sensitive_requires_acknowledgement(client, base):
     assert r.json()["outcome"] == "approved"
 
 
-# ------------------------------------------------------------------ verification + genericness loops
-async def test_unsupported_claim_rewritten(client, base):
-    fx = copy.deepcopy(base)
-    bad = copy.deepcopy(fx["llm"]["verify"][0])
-    bad["claims"].append({"claim": "You spoke at Dreamforce", "kind": "prospect_fact", "source_id": "s2",
-                          "supporting_quote": "Whitfield spoke at Dreamforce 2026", "entailed": True})
-    fx["llm"]["verify"] = [bad, fx["llm"]["verify"][0]]
-    fx["llm"]["rewrite"] = [fx["llm"]["draft"][0]]
-    rid, d = await run(client, fx)
-    v = stage(d, "verify")["output"]
-    assert v["rounds"][0]["unsupported"] == 1 and v["rounds"][-1]["unsupported"] == 0
-    assert d["drafts"][-1]["origin"] == "rewrite"
-    assert d["drafts"][-1]["meta"]["removed_claims"] == ["You spoke at Dreamforce"]
-
-
-async def test_unsupported_claim_survives_two_rewrites_warns(client, base):
-    fx = copy.deepcopy(base)
-    bad = copy.deepcopy(fx["llm"]["verify"][0])
-    bad["claims"].append({"claim": "Revenue doubled", "kind": "company_fact", "source_id": "",
-                          "supporting_quote": "", "entailed": False})
-    fx["llm"]["verify"] = [bad]
-    fx["llm"]["rewrite"] = [fx["llm"]["draft"][0]]
-    rid, d = await run(client, fx)
-    assert d["status"] == "awaiting_review"
-    assert d["drafts"][-1]["verification"]["unsupported"] == 1
-    assert stage(d, "verify")["output"]["unsupported"] == 1
-    assert any("unsupported" in w for w in d["warnings"])
-    assert len([x for x in d["drafts"] if x["origin"] == "rewrite"]) == 2
-
-
+# ------------------------------------------------------------------ genericness loop
 async def test_generic_regenerated_once_then_flagged(client, base):
     fx = copy.deepcopy(base)
     g = copy.deepcopy(fx["llm"]["generic"][0])

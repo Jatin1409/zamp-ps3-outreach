@@ -24,7 +24,7 @@ export function VerificationChecklist({ run }: { run: RunDetail }) {
         <span className={`pill ${unverified ? "warn" : "ok"}`}>
           {unverified ? `${unverified} of ${checks.length} not verified` : "All checks verified"}</span>
       </div>
-      <p className="small muted" style={{ marginTop: 2 }}>Only verified items are ever stated as fact in a draft. Anything else is left out.</p>
+      <p className="small muted" style={{ marginTop: 2 }}>What the research could and couldn't confirm about who and where the prospect is. Unconfirmed details are never used as the hook.</p>
       <ul className="check-list">
         {checks.map((c) => (
           <li key={c.key} className={`check-item ${c.status}`}>

@@ -78,16 +78,16 @@ def build_checks(p: dict, person: dict, company: dict, chosen: dict | None, chos
 
 
 async def stage_identity(ctx: RunContext, run: Run) -> dict:
-    from .stages import blocked, canonical_url, focus_text, full_text, name_terms
+    from .stages import blocked, canonical_url, focus_text, full_text, name_terms, q_safe
 
     p = run.prospect
     async with ctx.stage("identity", {"prospect": p}) as h:
-        queries = [SearchQuery(f'"{p["name"]}" "{p["company"]}"', max_results=6)]
-        if p.get("role"):
-            queries.append(SearchQuery(f'"{p["name"]}" {p["role"]} {p["company"]}', max_results=5))
-        queries.append(SearchQuery(f'"{p["name"]}" {p.get("role") or ""} joins OR appointed OR former'
-                                   .replace("  ", " "), max_results=5))
-        company_q = SearchQuery(f'"{p["company"]}" company OR headquarters OR founded OR "about us"', max_results=5)
+        nm, co, rl = q_safe(p["name"]), q_safe(p["company"]), q_safe(p.get("role"))
+        queries = [SearchQuery(f'"{nm}" "{co}"', max_results=6)]
+        if rl:
+            queries.append(SearchQuery(f'"{nm}" {rl} {co}', max_results=5))
+        queries.append(SearchQuery(f'"{nm}" {rl} joins OR appointed OR former'.replace("  ", " "), max_results=5))
+        company_q = SearchQuery(f'"{co}" company OR headquarters OR founded OR "about us"', max_results=5)
         queries.append(company_q)
         results = await ctx.search_many(h, queries)
         sources: list[dict] = []
@@ -155,6 +155,10 @@ async def stage_identity(ctx: RunContext, run: Run) -> dict:
                                  "verified_sources": len(urls), "name_matches": ok})
         cdec = decide_company(comp_views, dec.status)
         gate = identity_gate(dec, cdec)
+        if gate == "nothing_found" and (p.get("notes") or "").strip():
+            gate = "not_found"
+            dec.reasons.append("Public sources found neither the person nor the company, but you added notes - "
+                               "drafting from your notes only, with low confidence.")
 
         chosen = next((c for c in cand_out if c["id"] == dec.chosen), None)
         chosen_co = next((c for c in comp_out if c["id"] == cdec.chosen), None)

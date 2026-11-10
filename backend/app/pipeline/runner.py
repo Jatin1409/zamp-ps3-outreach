@@ -77,7 +77,7 @@ async def fail_run(run_id: str, msg: str):
 
 
 async def finish_not_drafted(ctx: RunContext, run_id: str, reason: str, outcome: str = "not_drafted"):
-    for k in ("draft", "verify", "generic", "review"):
+    for k in ("draft", "generic", "review"):
         await ctx.mark_stage(k, "skipped", "Skipped: " + reason)
     await update_run(run_id, status="completed", outcome=outcome, current_stage=None, finished_at=utcnow())
     await emit(run_id, "run_status", {"status": "completed", "outcome": outcome})
@@ -179,8 +179,12 @@ async def run_job(run_id: str, kind: str, payload: dict, fixture: dict | None = 
                 await stop_after_identity(ctx, run_id, identity)
                 return
             if st == "not_found":
-                await S.add_warning(run_id, "Person not found in public sources - nothing about them is stated "
-                                            "as fact; company-level research only.")
+                if (identity.get("company") or {}).get("status") == "not_found":
+                    await S.add_warning(run_id, "Neither the person nor the company was found in public sources - "
+                                                "the draft is based only on your notes.")
+                else:
+                    await S.add_warning(run_id, "Person not found in public sources - nothing about them is stated "
+                                                "as fact; company-level research only.")
             await _research_and_draft(ctx, run_id)
         elif kind == "resume":
             run = await load_run(run_id)
@@ -196,7 +200,7 @@ async def run_job(run_id: str, kind: str, payload: dict, fixture: dict | None = 
         elif kind == "regenerate":
             run = await load_run(run_id)
             route = (await _stage_output(run_id, "route")) or {}
-            await S.draft_verify_generic(ctx, run, route, origin="regenerate",
+            await S.draft_and_check(ctx, run, route, origin="regenerate",
                                          instruction=payload.get("instruction"))
             await _await_review(ctx, run_id)
         elif kind == "retry":
@@ -237,8 +241,8 @@ async def _finalize_interrupted(ctx: RunContext, run_id: str, kind: str, draft_v
         drafts = (await s.execute(select(Draft).where(Draft.run_id == run_id).order_by(Draft.version))).scalars().all()
         new = [d for d in drafts if d.version > draft_version_at_start]
         old = [d for d in drafts if d.version <= draft_version_at_start]
-        # a half-finished new draft (never fact-checked) is not kept if an earlier, complete one exists
-        if old and any(d.verification is None for d in new):
+        # a half-finished new draft (never checked) is not kept if an earlier, complete one exists
+        if old and any(d.genericness is None for d in new):
             await s.execute(delete(Draft).where(Draft.run_id == run_id, Draft.version > draft_version_at_start))
             new = []
         await s.commit()
@@ -250,8 +254,6 @@ async def _finalize_interrupted(ctx: RunContext, run_id: str, kind: str, draft_v
     if latest is not None:
         # results so far are usable: send the rep to review, saying exactly what is incomplete
         gaps = []
-        if latest.verification is None:
-            gaps.append("its claims were NOT fact-checked")
         if latest.genericness is None:
             gaps.append("the genericness check did not run")
         if kind == "regenerate" and not new:
@@ -310,7 +312,7 @@ async def _research_and_draft(ctx: RunContext, run_id: str):
         await finish_not_drafted(ctx, run_id, "nothing usable to write about. " + " ".join(dec.missing))
         return
     run = await load_run(run_id)
-    await S.draft_verify_generic(ctx, run, asdict(dec))
+    await S.draft_and_check(ctx, run, asdict(dec))
     await _await_review(ctx, run_id)
 
 
@@ -342,5 +344,5 @@ async def _retry(ctx: RunContext, run_id: str):
         await _research_and_draft(ctx, run_id)
     else:
         route = (await _stage_output(run_id, "route")) or {}
-        await S.draft_verify_generic(ctx, run, route)
+        await S.draft_and_check(ctx, run, route)
         await _await_review(ctx, run_id)

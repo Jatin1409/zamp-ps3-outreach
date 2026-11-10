@@ -5,8 +5,8 @@ Layered:
    stored and shown in the UI, but never reaches the drafting model.
 2. Isolation (prompts.py): every untrusted text is wrapped in <untrusted_source> tags, with the system prompt
    telling the model it is data, and angle brackets inside the text are escaped so it cannot close the tag.
-3. Containment (verify stage): every factual claim must be backed by a verbatim quote found in stored text, so
-   an injected "say you met at Dreamforce" cannot survive into an approved draft.
+3. Containment: the drafting model only sees the chosen hook and supporting signals (never quarantined text),
+   and each hook's key fact must be a verbatim quote found in the stored page before it can be used.
 4. Schema: model outputs are parsed into strict Pydantic schemas; free-form tool use is never offered.
 """
 from __future__ import annotations

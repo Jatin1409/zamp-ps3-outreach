@@ -44,7 +44,7 @@ export default function About() {
         <h2 className="section-title">About this project</h2>
         <p className="muted">Outreach Desk is my submission for Zamp's AI Solutions Analyst case study (PS-3:
           personalised outreach, from prospect to draft). It researches a B2B prospect from public sources, picks the
-          most relevant hook, writes a short email and fact-checks every claim against its source — and a person
+          most relevant hook, writes a short email built on it and checks it isn't generic — and a person
           approves it before anything goes anywhere. It's an independent build, not a Zamp product.</p>
       </section>
     </div>

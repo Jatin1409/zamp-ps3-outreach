@@ -34,10 +34,14 @@ class ProspectIn(BaseModel):
     linkedin_url: str | None = Field(default=None, max_length=300)
     notes: str | None = Field(default=None, max_length=6000)
 
-    @field_validator("name", "company", "role", "linkedin_url", "notes")
+    @field_validator("name", "company", "role", "linkedin_url", "notes", mode="before")
     @classmethod
     def strip(cls, v):
-        return v.strip() if isinstance(v, str) else v
+        # trim before the length checks run, so "   " is rejected as empty rather than accepted then emptied
+        if isinstance(v, str):
+            v = " ".join(v.split()) if "\n" not in v else v.strip()
+            return v or None
+        return v
 
     @field_validator("linkedin_url")
     @classmethod
@@ -66,6 +70,18 @@ class ReviewIn(BaseModel):
     instruction: str | None = Field(default=None, max_length=500)
     acknowledged_sensitive: bool = False
     acknowledged_incomplete: bool = False
+
+    @field_validator("subject", "body", "note", "instruction", mode="before")
+    @classmethod
+    def strip(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+    @field_validator("body")
+    @classmethod
+    def body_not_empty(cls, v):
+        if v is not None and not v:
+            raise ValueError("the email body can't be empty")
+        return v
 
 
 class RetryIn(BaseModel):
@@ -401,10 +417,10 @@ async def review(run_id: str, body: ReviewIn):
             rv.note = (body.note or "") + (" | lint: " + "; ".join(lint_draft(*_split(current))["issues"])
                                            if not lint_draft(*_split(current))["ok"] else "")
         elif body.action == "approve":
-            incomplete = d.verification is None or bool((r.interrupted or {}).get("incomplete"))
+            incomplete = bool((r.interrupted or {}).get("incomplete"))
             if incomplete and not body.acknowledged_incomplete:
-                raise HTTPException(400, "This draft was not fully checked (the run was stopped or hit the time "
-                                         "limit). Tick the acknowledgement before approving.")
+                raise HTTPException(400, "This draft is incomplete (the run was stopped or hit the time limit "
+                                         "before every check ran). Tick the acknowledgement before approving.")
             if needs_ack and not body.acknowledged_sensitive:
                 raise HTTPException(400, "This draft touches a sensitive situation. Tick the acknowledgement "
                                          "before approving.")

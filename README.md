@@ -1,10 +1,10 @@
-# Outreach Desk — prospect → personalised, fact-checked draft
+# Outreach Desk — prospect → personalised, evidence-grounded draft
 
 Zamp AI Solutions Analyst case study, **PS-3: Personalised outreach — from prospect to draft**.
 
 A rep types a prospect's name and company. The process researches public sources, confirms it has the right person,
-picks the most relevant hook, writes a short email, **fact-checks every claim against the stored source text**, tests
-whether the email is generic, and hands it to the rep for review. **Nothing is ever sent** — approval only marks a
+picks the most relevant hook (its key fact must be a quote that code finds in the stored source), writes a short
+email, tests whether the email is generic, and hands it to the rep for review. **Nothing is ever sent** — approval only marks a
 draft ready to copy.
 
 - **Live app:** https://outreach-desk-lmgu.onrender.com (access code shared separately; free hosting sleeps after
@@ -23,9 +23,8 @@ draft ready to copy.
 | 4 | Rank | Model scores specificity + relevance (0–3) and quotes a key fact | **Code**: `0.30·specific + 0.30·relevant + 0.25·recent + 0.15·credible` |
 | 5 | Route | Rules R1–R7 | **Code**: draft / draft with warning / ask rep / do not draft |
 | 6 | Draft | ≤ 120 words, one ask, no flattery or clichés | Model writes, **code** lints |
-| 7 | Verify | Model splits claims and cites quotes | **Code** checks each quote is really in the source; ≤ 2 rewrites |
-| 8 | Genericness | Deterministic rule + swap test against two decoy prospects | regenerate once, then flag |
-| 9 | Review | Approve / edit / reject / regenerate | **The rep** |
+| 7 | Genericness | Swap test against two decoy prospects | regenerate once, then flag |
+| 8 | Review | Approve / edit / reject / regenerate | **The rep** |
 
 **Also:** multiple **seller profiles** (create / edit / duplicate / delete / switch; runs and metrics are kept per
 profile), a prominent **Stop** that aborts a run mid-stage, a hard **90-second budget** per run that returns partial
@@ -53,8 +52,8 @@ React (Vite, TS) ──HTTP/SSE──▶ FastAPI ──▶ Postgres (runs, stage
 - **Replay mode** re-uses search results saved from an earlier live run of the same prospect (labelled on screen and
   stored on the run). Live is the default; a live search failure fails the stage and offers "Retry in replay mode".
 - **Access code + rate limits** (per network per hour, global per day, concurrent runs) protect the public link.
-- **Speed:** searches and scoring batches run in parallel, the swap test runs alongside verification, model calls are
-  hedged (a slow model is raced against the next one) behind a circuit breaker, and identical searches are cached for
+- **Speed:** searches and scoring batches run in parallel, each search has its own ~18 s cap (8 s per attempt, one quick retry) (one slow search can't hold
+  the stage), model calls are hedged (a slow model is raced against the next one) behind a circuit breaker, and identical searches are cached for
   6 h. **Budget:** 90 s of active time per run, enforced on every call; optional steps only start if they can finish.
 - **Stop:** cancels the run's task (in-flight provider calls are aborted); results so far are kept.
 
@@ -107,7 +106,7 @@ Runs every sample scenario live, checks it took its designed route, and writes `
 |---|---|---|
 | `LLM_PROVIDER` | `gemini` | `gemini` \| `anthropic` |
 | `GEMINI_API_KEY` | — | Google AI Studio key (free tier) |
-| `GEMINI_MODEL` / `GEMINI_MODEL_FAST` | `gemini-3.6-flash` / `gemini-3.5-flash-lite` | drafting+verification / classification+scoring |
+| `GEMINI_MODEL` / `GEMINI_MODEL_FAST` | `gemini-3.6-flash` / `gemini-3.5-flash-lite` | drafting / classification+scoring |
 | `LLM_EFFORT_FAST` / `LLM_EFFORT_DRAFT` | `low` / `medium` | thinking level per tier |
 | `LLM_MIN_INTERVAL_S` | `1.0` | spacing between model calls (free-tier quotas) |
 | `GEMINI_FALLBACKS` / `GEMINI_FAST_FALLBACKS` | `gemini-3.8-flash,gemini-3.5-flash-lite` / `gemini-3.1-flash-lite` | models tried in order when one's daily free quota is used up or it is overloaded; the model that answered is shown per stage |
@@ -139,10 +138,11 @@ or connect the GitHub app in Render to get deploy-on-push.
   **2026-12-04**; Gemini free-tier quotas are small (calls are spaced and 429s retried, but a burst of runs can fail
   a stage), and Google may use free-tier prompts to improve its products — don't paste confidential notes.
 - **No LinkedIn data** unless the rep pastes it (deliberate); person-level signal is thinner as a result.
-- **Quote matching is strict:** a correct paraphrase without a quotable sentence is marked unsupported.
+- **No separate claim-by-claim fact check** (removed at the owner's request, D26): identity evidence and each hook's
+  key fact are still quote-checked by code, but the draft's sentences are not individually linked to sources - the rep
+  reviews them against the Signals tab.
 - **Thresholds are hand-tuned** on a small set of live runs; they'd need tuning on real rep feedback.
-- **Single shared access code**, no per-user accounts; one seller profile.
-- **Edited text is not re-fact-checked** (the UI says so).
+- **Single shared access code**, no per-user accounts.
 - **The 90 s budget depends on the free Gemini tier's health.** On bad days some runs reach the limit and return an
   incomplete (clearly flagged) draft; see `docs/EVAL_RESULTS.md` for measured timings.
 - **Seller profiles are shared** by everyone with the access code (no per-user ownership).

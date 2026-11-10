@@ -7,26 +7,28 @@
 
 SCENARIOS: list[dict] = [
     {
-        "key": "happy_rosenbauer",
-        "title": "Happy path — new CFO digitising finance",
-        "description": "New CFO whose appointment announcement says he will establish digital processes across "
-                       "finance. A clean person-level hook.",
+        "key": "happy_zerodha",
+        "title": "Happy path — Zerodha's founder-CEO",
+        "description": "One of India's best-known fintech founders, with plenty of public interviews and company "
+                       "coverage to hook on.",
         "expected_route": "draft", "edge_case": None,
-        "prospect": {"name": "Jörg Schuschnig", "company": "Rosenbauer International", "role": "CFO"},
+        "prospect": {"name": "Nithin Kamath", "company": "Zerodha", "role": "Founder & CEO"},
     },
     {
-        "key": "happy_legitscript",
-        "title": "Happy path — combined COO/CFO, podcast guest",
-        "description": "Finance leader with a recent podcast and press coverage of her dual COO/CFO role.",
+        "key": "happy_nykaa",
+        "title": "Happy path — Nykaa's founder-CEO",
+        "description": "Founder-CEO of a large Indian beauty retailer selling online and through stores - a business "
+                       "with many suppliers.",
         "expected_route": "draft", "edge_case": None,
-        "prospect": {"name": "Jaylene Kunze", "company": "LegitScript", "role": "CFO"},
+        "prospect": {"name": "Falguni Nayar", "company": "Nykaa", "role": "Founder & CEO"},
     },
     {
-        "key": "happy_oaknorth",
-        "title": "Happy path — new CFO at an expanding bank",
-        "description": "CFO hired this year while the bank expands into the US.",
+        "key": "happy_mahindra",
+        "title": "Happy path — Mahindra Group's chairman",
+        "description": "Chairman of one of India's largest business groups; widely covered, with group-level facts "
+                       "to anchor on.",
         "expected_route": "draft", "edge_case": None,
-        "prospect": {"name": "Gergely Zaborszky", "company": "OakNorth", "role": "CFO"},
+        "prospect": {"name": "Anand Mahindra", "company": "Mahindra Group", "role": "Chairman"},
     },
     {
         "key": "outdated_dbt",

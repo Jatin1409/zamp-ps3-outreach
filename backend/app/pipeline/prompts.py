@@ -147,39 +147,6 @@ def draft_user(prospect: dict, seller: dict, hook: dict, support: list[dict], pe
     return "\n\n".join(parts)
 
 
-# --------------------------------------------------------------------------- verify
-VERIFY_SYSTEM = GUARD + """
-
-You fact-check a sales email against stored sources. Split the email (subject + body) into atomic claims.
-- prospect_fact / company_fact: any statement about the prospect or their company (events, numbers, roles,
-  dates, plans). seller_fact: any statement about the seller (product, customers, results).
-- opinion_or_framing: hypotheses and framing ('teams in that spot often...'), which need no source.
-- ask: the call to action.
-For every fact, give source_id (e.g. 's3', or 'seller.proof_points', 'seller.product', 'seller.problems_solved')
-and copy the supporting text VERBATIM from that source. entailed = true only if the quote fully supports the
-claim as written, including any numbers and dates. If nothing supports it, source_id='' and entailed=false.
-Do not judge style. Do not skip claims."""
-
-
-def verify_user(draft: dict, sources: list[dict], seller: dict) -> str:
-    return (f"EMAIL\nSubject: {draft['subject']}\n\n{draft['body']}\n\nSOURCES\n" + wrap_sources(sources, 3000)
-            + f"\n\nSELLER PROFILE (source ids seller.<field>)\n{seller_block(seller)}")
-
-
-REWRITE_SYSTEM = DRAFT_SYSTEM + """
-
-You are revising your previous draft. Some claims could not be verified against the sources. Remove them or
-rewrite them so they say only what the quoted sources support. Keep everything else as close as possible."""
-
-
-def rewrite_user(prospect, seller, hook, support, draft: dict, unsupported: list[dict], personalisation) -> str:
-    base = draft_user(prospect, seller, hook, support, personalisation)
-    bad = "\n".join(f"- \"{c['claim']}\" ({c.get('problem', 'not supported by any stored source')})"
-                    for c in unsupported)
-    return (base + f"\n\nPREVIOUS DRAFT\nSubject: {draft['subject']}\n\n{draft['body']}\n\n"
-            f"UNSUPPORTED CLAIMS - remove or rewrite:\n{bad}")
-
-
 # --------------------------------------------------------------------------- genericness
 GENERIC_SYSTEM = """You test whether a cold email is generic. The prospect's name and company have been replaced by
 [NAME] and [COMPANY]. For each decoy prospect, decide whether the email would still make sense, essentially

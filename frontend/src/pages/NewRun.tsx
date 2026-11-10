@@ -6,7 +6,7 @@ import { useProfiles } from "../state";
 import { EDGE_LABEL, ROUTE_LABEL, routeTone } from "../format";
 
 const EMPTY: Prospect = { name: "", company: "", role: "", linkedin_url: "", notes: "" };
-const STEPS = ["Confirm identity", "Gather signals", "Filter", "Rank", "Route", "Draft", "Verify", "Genericness", "You review"];
+const STEPS = ["Confirm identity", "Gather signals", "Filter", "Rank", "Route", "Draft", "Genericness", "You review"];
 
 export default function NewRun() {
   const nav = useNavigate();
@@ -55,7 +55,7 @@ export default function NewRun() {
         <div className="eyebrow">Zamp · AI Solutions Analyst case study · PS-3 personalised outreach</div>
         <h1 style={{ marginTop: 8 }}>From prospect to a draft worth reviewing — grounded in something real.</h1>
         <p className="lead">A rep names a B2B prospect. The process confirms who they are, researches public sources,
-          picks the most relevant hook, writes a short email, and fact-checks every claim against its source. A human
+          picks the most relevant hook, writes a short email built on it, and tests that it isn't generic. A human
           approves before anything goes anywhere — it cannot send email.</p>
         <div className="steps">{STEPS.map((s, i) => <span key={s} className="step-chip"><span className="mono">{String(i + 1).padStart(2, "0")}</span>{s}</span>)}</div>
         <div className="review-tip"><strong>Reviewing this submission?</strong> You play the sales rep. Start with a

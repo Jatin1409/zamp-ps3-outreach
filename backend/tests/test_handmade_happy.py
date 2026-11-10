@@ -22,7 +22,7 @@ async def test_happy_path_end_to_end(db, monkeypatch):
         sigs = (await s.execute(select(Signal).where(Signal.run_id == rid))).scalars().all()
         drafts = (await s.execute(select(Draft).where(Draft.run_id == rid))).scalars().all()
     by = {st.key: st for st in stages}
-    for k in ("identity", "gather", "filter", "rank", "route", "draft", "verify", "generic"):
+    for k in ("identity", "gather", "filter", "rank", "route", "draft", "generic"):
         assert by[k].status == "succeeded", (k, by[k].status, by[k].error)
         assert by[k].duration_ms is not None and by[k].explanation
     assert by["review"].status == "waiting"
@@ -31,6 +31,6 @@ async def test_happy_path_end_to_end(db, monkeypatch):
     assert any(x.drop_reason and x.drop_reason.startswith("Duplicate") for x in sigs)
     assert by["rank"].output["explain"]["winner"] == "s2"
     d = drafts[-1]
-    assert d.verification["passed"] and d.verification["unsupported"] == 0
+    assert d.verification is None   # the claim-verification stage was removed (owner's decision, 2026-11-11)
     assert d.genericness["generic"] is False
     assert run.tokens_in > 0

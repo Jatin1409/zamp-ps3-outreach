@@ -34,5 +34,3 @@ async def test_recorded_run_reproduces_route(db, monkeypatch, path):
     assert d["final_route"] == exp["final_route"]
     assert d["route_path"] == exp["route_path"]
     assert sorted(d["edge_cases"]) == sorted(exp["edge_cases"])
-    if exp.get("unsupported") is not None and d["drafts"]:
-        assert d["drafts"][-1]["verification"]["unsupported"] == exp["unsupported"]

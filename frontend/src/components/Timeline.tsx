@@ -10,7 +10,6 @@ const WHAT: Record<string, string> = {
   rank: "Scores each signal on specificity, relevance, recency and credibility.",
   route: "Applies fixed rules to decide: draft, draft with a warning, ask you, or don't draft.",
   draft: "Writes a short email (≤120 words) with one ask.",
-  verify: "Checks every factual claim against the stored source text.",
   generic: "Tests whether the email would still make sense for a different prospect.",
   review: "You approve, edit, reject or regenerate. Nothing is sent.",
 };

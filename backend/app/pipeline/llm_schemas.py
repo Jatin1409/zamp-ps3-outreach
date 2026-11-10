@@ -93,20 +93,6 @@ class DraftOut(Strict):
     ask: str
 
 
-# --- Stage 7: verify ------------------------------------------------------------------
-class Claim(Strict):
-    claim: str = Field(description="One atomic statement from the draft")
-    kind: Literal["prospect_fact", "company_fact", "seller_fact", "opinion_or_framing", "ask"]
-    source_id: str = Field(description="Signal id like 's3', or 'seller.<field>' for seller-profile facts, "
-                                       "or '' if none")
-    supporting_quote: str = Field(description="Verbatim text from that source that supports the claim, or ''")
-    entailed: bool = Field(description="Does the quote fully support the claim as written?")
-
-
-class ClaimBatch(Strict):
-    claims: list[Claim]
-
-
 # --- Stage 8: genericness --------------------------------------------------------------
 class DecoyCheck(Strict):
     decoy: str

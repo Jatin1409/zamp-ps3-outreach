@@ -58,8 +58,7 @@ If nothing usable and safe exists, we say so and list what is missing, rather th
 counted in the dashboard as an outcome, not a failure.
 
 ### D7. Genericness = deterministic check + swap test
-A draft with no verified prospect-specific claim is generic by definition (code). Otherwise names are masked and the
-model is asked whether the email would still make sense for two fixed decoys (a logistics finance head with no news, a
+Names are masked and the model is asked whether the email would still make sense for two fixed decoys (a logistics finance head with no news, a
 hotel ops VP). One regeneration, then a flag. Fixed decoys make the check comparable across runs.
 
 ### D8. Approval never sends
@@ -87,7 +86,8 @@ file still contains that public Wikipedia sentence.
 1. Pattern detector quarantines sources containing instructions aimed at an AI (stored and shown, never sent to the
    drafting model). 2. All untrusted text is wrapped in `<untrusted_source>` tags with angle brackets escaped so it
    cannot close the tag; system prompts say it is data. 3. Strict output schemas, no tools offered to the model.
-4. Claim verification: even an injection that slips through can't put an unsupported fact into a verified draft.
+4. Grounding: the drafter only sees the chosen hook (whose key fact code found verbatim in the source), two
+   supporting signals and the seller profile. (Until D26 a claim-by-claim check was a fifth layer.)
 Rep notes go through the same detector.
 - **Tradeoff:** regex detection is bypassable by a determined attacker; layers 2–4 are the real protection.
 
@@ -116,9 +116,8 @@ Anthropic, Fixture (recorded); Tavily, Replay, Fixture. Swapping a model is an e
 swapping a vendor is one class.
 
 ### D15. Model choice: Google Gemini free tier (owner's decision), Claude kept as a drop-in alternative
-- **Decision:** `LLM_PROVIDER=gemini`. Drafting and verification use `gemini-3.6-flash` (stable); classification and
-  scoring use `gemini-3.5-flash-lite` (stable). Thinking level `low` for classification, `medium` for drafting and
-  verification. Model IDs, structured-output support and free-tier pricing were checked against Google's docs on
+- **Decision:** `LLM_PROVIDER=gemini`. Drafting uses `gemini-3.6-flash` (stable); classification and
+  scoring use `gemini-3.5-flash-lite` (stable). Thinking level `low` for classification, `medium` for drafting. Model IDs, structured-output support and free-tier pricing were checked against Google's docs on
   2026-11-05.
 - **Alternatives:** Anthropic Claude (built first and still implemented: `LLM_PROVIDER=anthropic`); Claude Haiku for
   classification at a few cents per run.
@@ -193,10 +192,9 @@ regeneration loop when a draft was generic. Changes, in order of impact:
   sent to the next model and the first answer wins; the loser is cancelled. Targets the long tail directly.
 - **Fast-only chains:** classification never falls back to the slower, 20-requests/day Flash models (measured:
   20-45 s lost per call when it did); per-attempt timeouts cut from 20/35 s to 10/20 s.
-- **Parallel I/O:** identity (4) and gather (5) searches run concurrently; scoring batches run concurrently; the
-  genericness swap test runs at the same time as claim verification instead of after it.
+- **Parallel I/O:** identity (4) and gather (5) searches run concurrently; scoring batches run concurrently; (until D26
+  the genericness swap test also ran alongside claim verification).
 - **Search cache:** identical searches (same query + filters) are reused for 6 h across runs.
-- **Cheaper verification:** claim-checking uses the drafting models at low thinking effort (it's extraction).
 - Result: see `docs/EVAL_RESULTS.md` -> Performance. Under a period of heavy Google free-tier overload, 5/5 live runs
   finished inside 90 s (avg 65.6 s) where 2 of 3 had hit the limit before the hedging/fast-chain changes.
 - **Tradeoff:** hedging can spend two requests on one answer (only when the first is slow); the cache can serve
@@ -246,3 +244,31 @@ regeneration loop when a draft was generic. Changes, in order of impact:
   person not found but company found -> company-level research only (labelled lower personalisation).
 - Every run shows a **"What we could verify"** checklist (person, employer, role, company, person-level signal, company
   news) with verified / not verified / conflicting / fictional for each, so partial information is explicit.
+
+### D26. Claim-by-claim verification removed (owner's decision, iteration 3)
+- **Decision:** the Verify stage (model splits the draft into claims + quotes, code finds each quote, up to 2 rewrites)
+  is gone. Pipeline: identity → gather → filter → rank → route → draft → genericness → review.
+- **Why:** the owner judged it unnecessary; it was also the slowest optional step (1-3 model calls per draft) and the
+  usual reason a run brushed the 90 s limit.
+- **What still grounds the draft:** identity evidence must be a quote code finds on the page (D2, D25); a signal is only
+  eligible as the hook if its key fact is found verbatim in the stored source; the drafter sees only the hook, two
+  supporting signals and the seller profile; all web text is fenced as untrusted data (D11).
+- **What we lose:** no claim → quote → link list under the draft and no automatic rewrite of an unsupported sentence, so
+  a model slip in the email text itself is caught only by the rep. The genericness check loses its "no verified claim =
+  generic" shortcut (swap test only). The incomplete-on-timeout flag now only concerns the genericness check.
+
+### D27. Edge-case sweep (iteration 3)
+Found by trying unusual inputs against the running app; each fix has a test (`tests/test_edge_inputs.py`).
+- Whitespace-only name/company was accepted (length checked before trimming) -> trimmed first; blank optional fields
+  become empty.
+- A double quote in a name (`Nithin "NK" Kamath`) broke the quoted search phrase -> rep text is sanitised in queries.
+- Non-Latin company names (e.g. Devanagari) never matched -> company tokens split on whitespace/punctuation, any script.
+- Neither person nor company found but the rep added notes -> previously a hard stop; now drafts from the notes only,
+  low confidence, with a warning saying exactly that.
+- An edit that emptied the email body was accepted -> rejected.
+- Stalled web searches held a stage for 53-58 s (live; httpx timeouts are per phase) -> 8 s hard cap per search attempt, 1 quick retry (~18 s max per search); a failed search is
+  skipped and logged on the stage; only all searches failing fails the stage.
+- Product listings (live: "Buy Peyush Bansal Shark Tank ... Eyeglasses" ranked top) -> shopping pages are dropped in
+  the filter stage by code.
+- Checked and already correct: unknown ids (404), double decisions/approvals (409), regenerate twice (409), profile
+  deleted while selected (falls back to default), editing a profile after a run (snapshot unchanged).
