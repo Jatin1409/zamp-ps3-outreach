@@ -1,6 +1,6 @@
 {
- "_note": "Recorded from live run 9e7755ad8eeb (live) on 2026-11-10.",
- "recorded_from": "9e7755ad8eeb",
+ "_note": "Recorded from live run 9a4fc12cf320 (live) on 2026-11-10.",
+ "recorded_from": "9a4fc12cf320",
  "today": "2026-11-10",
  "prospect": {
   "name": "Michael Brown",
@@ -235,23 +235,23 @@
       "current_role": "Senior Manager",
       "at_input_company": "current",
       "role_matches_input": "no",
-      "distinguisher": "Colonel, former FAA Chief Information Security Officer, federal technology risk practice",
+      "distinguisher": "Federal technology risk practice, former FAA CISO",
       "is_fictional": false,
       "fiction_source": "",
       "evidence": [
        {
         "source": 0,
-        "quote": "Colonel Michael Brown, former chief information security officer of the Federal Aviation Administration (FAA), has joined Deloitte's federal technology risk practice as a senior manager with Deloitte & Touche LLP."
+        "quote": "Colonel Michael F. Brown, former chief information security officer of the Federal Aviation Administration (FAA), has joined Deloitte's federal technology risk practice as a senior manager with Deloitte & Touche LLP."
        }
       ]
      },
      {
       "full_name": "Michael W. Brown",
-      "current_company": "Microsoft Corporation",
-      "current_role": "Former Vice President and Chief Financial Officer",
+      "current_company": "VMWare, Inc., Insperity, Inc., and EMC Corporation",
+      "current_role": "Director",
       "at_input_company": "former",
       "role_matches_input": "no",
-      "distinguisher": "Former Microsoft CFO and Deloitte managing partner in Seattle/Bellevue",
+      "distinguisher": "Former Microsoft CFO and Deloitte & Touche Managing Partner in Seattle/Bellevue",
       "is_fictional": false,
       "fiction_source": "",
       "evidence": [
@@ -264,10 +264,10 @@
      {
       "full_name": "Michael Brown",
       "current_company": "Dowling & Yahnke",
-      "current_role": "",
+      "current_role": "RIA Member",
       "at_input_company": "former",
       "role_matches_input": "yes",
-      "distinguisher": "CPA, former partner at Deloitte Touche Tohmatsu who joined an RIA in San Diego",
+      "distinguisher": "CPA and former Deloitte partner who moved to a San Diego RIA",
       "is_fictional": false,
       "fiction_source": "",
       "evidence": [
@@ -294,7 +294,7 @@
      }
     ],
     "conflicting_sources": true,
-    "summary": "Multiple individuals named Michael Brown are associated with Deloitte across the sources, including a senior manager in the federal technology risk practice, a former managing partner who later became CFO of Microsoft, and a former partner who joined an RIA in San Diego."
+    "summary": "Multiple individuals named Michael Brown are associated with Deloitte across the sources, including a senior manager in federal technology risk, a former managing partner who became Microsoft CFO, and a partner who left to join an RIA."
    }
   ]
  }

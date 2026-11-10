@@ -23,6 +23,18 @@ sys.path.insert(0, str(ROOT / "backend"))
 from app.scenarios import SCENARIOS  # noqa: E402
 
 
+class Retrying(httpx.Client):
+    """The free Render instance occasionally resets a connection; retry any request a few times."""
+    def request(self, *a, **kw):
+        for i in range(5):
+            try:
+                return super().request(*a, **kw)
+            except httpx.TransportError:
+                if i == 4:
+                    raise
+                time.sleep(2 + 2 * i)
+
+
 def wait(c: httpx.Client, rid: str, until: tuple[str, ...], timeout: float = 400) -> dict:
     t0 = time.time()
     while time.time() - t0 < timeout:
@@ -38,6 +50,7 @@ def wait(c: httpx.Client, rid: str, until: tuple[str, ...], timeout: float = 400
 
 
 def run_scenario(c: httpx.Client, sc: dict, mode: str) -> dict:
+    t_start = time.time()
     r = c.post("/api/runs", json={"prospect": sc["prospect"], "mode": mode, "scenario_key": sc["key"]})
     r.raise_for_status()
     rid = r.json()["id"]
@@ -66,6 +79,8 @@ def run_scenario(c: httpx.Client, sc: dict, mode: str) -> dict:
         "rewrites": sum(1 for x in d["drafts"] if x["origin"] == "rewrite"),
         "words": (last or {}).get("lint", {}).get("word_count"),
         "duration_s": round(d["active_ms"] / 1000, 1), "cost_usd": d["cost_usd"],
+        "interrupted": (d.get("interrupted") or {}).get("reason"),
+        "wall_s": round(time.time() - t_start, 1),
         "tokens": d["tokens_in"] + d["tokens_out"], "subject": (last or {}).get("subject"),
         "body": (last or {}).get("body"), "mode": d["mode"],
         "hook": next((s["title"] for s in d["signals"] if last and s["sid"] == last["hook_signal_id"]), None),
@@ -92,7 +107,11 @@ def write_report(rows: list[dict], base: str, path: Path):
          f"| Unsupported claims left in final drafts | **{unsup}** of {facts} factual claims across {len(drafted)} drafts |",
          f"| Final drafts still flagged generic | **{gen}**/{len(drafted)} (regenerated once for genericness: {regen}) |",
          f"| Failed runs | {len(fails)} |",
-         f"| Median duration | {sorted(r['duration_s'] for r in rows)[n // 2] if rows else '-'} s |",
+         f"| Median duration (active) | {sorted(r['duration_s'] for r in rows)[n // 2] if rows else '-'} s |",
+         f"| Average duration (active) | {sum(r['duration_s'] for r in rows) / max(n, 1):.1f} s |",
+         f"| Slowest run (active) | {max((r['duration_s'] for r in rows), default=0):.1f} s |",
+         f"| Finished within the 90 s budget | **{sum(1 for r in rows if r.get('duration_s', 0) <= 90 and not r.get('interrupted'))}/{n}** "
+         f"(hit the limit: {sum(1 for r in rows if r.get('interrupted') == 'timeout')}) |",
          f"| Total cost | ${sum(r['cost_usd'] for r in rows):.3f} (avg ${sum(r['cost_usd'] for r in rows) / max(n, 1):.3f}/run) |",
          "", "## Per scenario", "",
          "| Scenario | Expected route | Actual route path | Edge case | Claims (unsupported) | Generic | Time | Cost | Run |",
@@ -127,7 +146,7 @@ def main():
     a = ap.parse_args()
     only = set(filter(None, a.only.split(",")))
     rows = []
-    with httpx.Client(base_url=a.base.rstrip("/"), headers={"X-Access-Code": a.code}, timeout=120) as c:
+    with Retrying(base_url=a.base.rstrip("/"), headers={"X-Access-Code": a.code}, timeout=120) as c:
         for sc in SCENARIOS:
             if only and sc["key"] not in only:
                 continue
