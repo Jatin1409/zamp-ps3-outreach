@@ -23,15 +23,17 @@ class Settings(BaseSettings):
     gemini_max_retries: int = 4
     # Free-tier quotas are per model per day (gemini-3.6-flash: 20 requests/day, observed 2026-11-05), so each tier
     # falls back down an ordered chain when a model's daily quota is used up or it is overloaded.
-    gemini_fallbacks: str = "gemini-3.8-flash,gemini-3.5-flash-lite"
+    gemini_fallbacks: str = "gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-3.8-flash"
     gemini_fast_fallbacks: str = "gemini-3.1-flash-lite"
     search_cost_per_call_usd: float = 0.0  # Tavily free tier = $0; pay-as-you-go list price is $0.008
 
     # --- performance / time budget ------------------------------------------
     run_budget_s: float = 90.0             # hard limit on active execution time per run (pauses excluded)
-    llm_attempt_timeout_fast_s: float = 20.0   # one model attempt; a slow model is abandoned for the next one
-    llm_attempt_timeout_draft_s: float = 35.0
-    model_cooldown_s: float = 60.0         # skip a model this long after it returns 503 / times out
+    llm_attempt_timeout_fast_s: float = 10.0   # one model attempt; a stalled model is abandoned for the next one
+    llm_attempt_timeout_draft_s: float = 20.0
+    llm_hedge_after_fast_s: float = 4.0        # no answer yet? send the same request to the next model too
+    llm_hedge_after_draft_s: float = 9.0
+    model_cooldown_s: float = 20.0         # deprioritise a model this long after it returns 503 / stalls
     search_cache_ttl_s: float = 6 * 3600   # reuse identical searches (same query+filters) for 6 hours
     min_s_for_rewrite: float = 22.0        # don't start an optional step that can't finish inside the budget
     min_s_for_regenerate: float = 35.0

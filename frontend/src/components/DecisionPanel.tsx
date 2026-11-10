@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, ExternalLink, Hand, StopCircle, Users, Shuffle } from "lucide-react";
+import { ArrowRight, Building2, ExternalLink, Hand, StopCircle, Users, Shuffle } from "lucide-react";
 import { post, RunDetail } from "../api";
 import { fmtPub, host } from "../format";
 
@@ -31,6 +31,35 @@ export default function DecisionPanel({ run, onDone }: { run: RunDetail; onDone:
     catch (e: any) { setErr(e.message); } finally { setBusy(false); }
   };
   if (!pause) return null;
+
+  if (pause.kind === "ambiguous_company") {
+    return (
+      <div className="card stack">
+        <div className="row"><span className="pill warn"><Building2 size={13} /> Ambiguous company</span></div>
+        <h2>Which “{run.prospect.company}” do you mean?</h2>
+        <p className="muted">More than one organisation has this name. Researching the wrong one would put the wrong facts in the
+          draft, so the run is paused until you choose.</p>
+        <div className="stack">
+          {pause.candidates.map((c: any) => (
+            <label key={c.id} className={`cand ${sel === c.id ? "sel" : ""}`} style={{ cursor: "pointer" }}>
+              <div className="row-between">
+                <div className="row"><input type="radio" name="comp" checked={sel === c.id} onChange={() => setSel(c.id)} />
+                  <strong>{c.name}</strong>{c.short_label && <span className="chip">{c.short_label}</span>}</div>
+                <span className="chip">{c.verified_sources} verified source{c.verified_sources === 1 ? "" : "s"}</span>
+              </div>
+              {c.what_it_does && <div className="small" style={{ marginTop: 4 }}>{c.what_it_does}</div>}
+              <Evidence ev={c.evidence} />
+            </label>
+          ))}
+        </div>
+        {err && <div className="callout bad small">{err}</div>}
+        <div className="row-between">
+          <button className="btn danger sm" disabled={busy} onClick={() => send("stop")}><StopCircle size={14} /> None of these — stop</button>
+          <button className="btn" disabled={!sel || busy} onClick={() => send("pick_company", sel!)}>Research this company <ArrowRight size={16} className="arrow" /></button>
+        </div>
+      </div>
+    );
+  }
 
   if (pause.kind === "ambiguous") {
     return (

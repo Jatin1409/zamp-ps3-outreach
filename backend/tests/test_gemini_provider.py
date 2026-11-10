@@ -89,7 +89,8 @@ async def test_429_exhausted_raises_rate_limited(monkeypatch):
     with pytest.raises(LLMError) as ex:
         await llm.complete(purpose="filter", system="s", user="u", schema=FilterBatch)
     assert ex.value.kind == "rate_limited"
-    assert len({c["model"] for c in fm.calls}) == 4  # every configured model was tried
+    # classification only uses the Flash-Lite models (never the slow, 20/day Flash models)
+    assert {c["model"] for c in fm.calls} == {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite"}
 
 
 async def test_whole_chain_overloaded_backs_off_and_recovers(monkeypatch):
@@ -98,18 +99,17 @@ async def test_whole_chain_overloaded_backs_off_and_recovers(monkeypatch):
     e503 = errors.ServerError(503, {"error": {"code": 503, "message": "high demand", "status": "UNAVAILABLE"}})
     llm, fm = make(monkeypatch, [e503] * 4 + [resp(OK)])
     r = await llm.complete(purpose="draft", system="s", user="u", schema=FilterBatch, tier="draft")
-    assert [c["model"] for c in fm.calls[:4]] == ["gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite",
-                                                  "gemini-3.1-flash-lite"]
+    assert [c["model"] for c in fm.calls[:4]] == ["gemini-3.6-flash", "gemini-3.5-flash-lite",
+                                                  "gemini-3.1-flash-lite", "gemini-3.8-flash"]
     assert fm.calls[4]["model"] == "gemini-3.6-flash"   # second round after backing off
     assert len(r.fallback_from) == 4
 
 
-async def test_draft_tier_can_fall_back_to_fast_tier_model(monkeypatch):
-    G._exhausted_until.clear()
+async def test_draft_tier_falls_back_to_flash_lite_before_the_slow_flash_model(monkeypatch):
     e503 = errors.ServerError(503, {"error": {"code": 503, "message": "high demand", "status": "UNAVAILABLE"}})
-    llm, fm = make(monkeypatch, [e503, e503, e503, resp(OK)])
+    llm, fm = make(monkeypatch, [e503, resp(OK)])
     r = await llm.complete(purpose="draft", system="s", user="u", schema=FilterBatch, tier="draft")
-    assert r.model == "gemini-3.1-flash-lite"
+    assert r.model == "gemini-3.5-flash-lite"
 
 
 async def test_bad_key_is_config_error(monkeypatch):
@@ -159,12 +159,12 @@ async def test_daily_quota_falls_back_to_next_model_without_waiting(monkeypatch)
     G._exhausted_until.clear()
     llm, fm = make(monkeypatch, [quota_err(), resp(OK)])
     r = await llm.complete(purpose="draft", system="s", user="u", schema=FilterBatch, tier="draft")
-    assert [c["model"] for c in fm.calls] == ["gemini-3.6-flash", "gemini-3.8-flash"]
-    assert r.model == "gemini-3.8-flash" and "daily quota" in r.fallback_from[0]
+    assert [c["model"] for c in fm.calls] == ["gemini-3.6-flash", "gemini-3.5-flash-lite"]
+    assert r.model == "gemini-3.5-flash-lite" and "daily quota" in r.fallback_from[0]
     # remembered: the next call skips the exhausted model entirely
     fm.items.append(resp(OK))
     await llm.complete(purpose="draft", system="s", user="u", schema=FilterBatch, tier="draft")
-    assert fm.calls[-1]["model"] == "gemini-3.8-flash"
+    assert fm.calls[-1]["model"] == "gemini-3.5-flash-lite"
     G._exhausted_until.clear()
 
 
@@ -189,10 +189,10 @@ async def test_circuit_breaker_skips_recently_overloaded_model_on_next_call(monk
     e503 = errors.ServerError(503, {"error": {"code": 503, "message": "high demand", "status": "UNAVAILABLE"}})
     llm, fm = make(monkeypatch, [e503, resp(OK), resp(OK)])
     await llm.complete(purpose="draft", system="s", user="u", schema=FilterBatch, tier="draft")
-    assert [c["model"] for c in fm.calls] == ["gemini-3.6-flash", "gemini-3.8-flash"]
+    assert [c["model"] for c in fm.calls] == ["gemini-3.6-flash", "gemini-3.5-flash-lite"]
     # the next call goes straight to a healthy model - no time wasted rediscovering the overloaded one
     await llm.complete(purpose="verify", system="s", user="u", schema=FilterBatch, tier="draft")
-    assert fm.calls[-1]["model"] == "gemini-3.8-flash"
+    assert fm.calls[-1]["model"] == "gemini-3.5-flash-lite"
     assert "gemini-3.6-flash" in G.model_health()["cooling"]
 
 
@@ -225,3 +225,25 @@ async def test_call_respects_the_overall_deadline(monkeypatch):
     with pytest.raises(LLMError) as ex:
         await llm.complete(purpose="filter", system="s", user="u", schema=FilterBatch, tier="fast", timeout=1.0)
     assert ex.value.kind == "timeout"
+
+
+class StallFirst(FakeModels):
+    """The first model stalls for 3 s; any other model answers at once."""
+    async def generate_content(self, *, model, contents, config):
+        self.calls.append({"model": model, "contents": contents, "config": config})
+        if model == "gemini-3.5-flash-lite":
+            await _real_sleep(3)
+        return resp(OK)
+
+
+async def test_hedged_request_takes_the_faster_model(monkeypatch):
+    llm, _ = make(monkeypatch, [])
+    monkeypatch.setattr(get_settings(), "llm_hedge_after_fast_s", 0.2)
+    fm = StallFirst([])
+    llm.client = NS(aio=NS(models=fm))
+    t0 = asyncio.get_running_loop().time()
+    r = await llm.complete(purpose="filter", system="s", user="u", schema=FilterBatch, tier="fast")
+    took = asyncio.get_running_loop().time() - t0
+    assert r.model == "gemini-3.1-flash-lite" and took < 1.0       # did not wait for the stalled model
+    assert [c["model"] for c in fm.calls] == ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
+    assert "parallel request" in r.fallback_from[0]

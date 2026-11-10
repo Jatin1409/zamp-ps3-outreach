@@ -124,11 +124,63 @@ class GeminiLLM:
             _last_call = time.monotonic()
 
     def chain(self, tier: str) -> list[str]:
-        """This tier's models first, then every other configured model as a last resort."""
+        """fast tier: only the Flash-Lite models (high quota, quick). Measured 2026-11-10: falling back to the
+        Flash models for classification cost 20-45 s per call (they hang or 503 under load) and spent their tiny
+        20/day quota. Drafting/verification: the main model first, then its fallbacks, then the fast models."""
         s = self.s
         draft = [s.gemini_model] + [m.strip() for m in s.gemini_fallbacks.split(",") if m.strip()]
         fast = [s.gemini_model_fast] + [m.strip() for m in s.gemini_fast_fallbacks.split(",") if m.strip()]
-        return list(dict.fromkeys((fast + draft) if tier == "fast" else (draft + fast)))
+        return list(dict.fromkeys(fast if tier == "fast" else (draft + fast)))
+
+    def _note_failure(self, model: str, exc: BaseException):
+        code = getattr(exc, "code", None)
+        if code == 429 and _is_daily_quota(exc):
+            _mark_exhausted(model, _retry_delay(exc) or 3600)
+        elif code in (500, 502, 503, 504) or isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
+            _mark_cooling(model, self.s.model_cooldown_s)
+
+    async def _attempt(self, m1: str, m2: str | None, prompt, cfg, timeout: float, hedge_after: float):
+        """One attempt, hedged: if `m1` hasn't answered after `hedge_after` seconds, send the same request to `m2`
+        and take whichever answers first (the other is cancelled). Cuts tail latency when a model stalls.
+        Returns (response, model). Raises m1's error (or TimeoutError) if neither answers in time."""
+        def call(m):
+            return asyncio.create_task(self.client.aio.models.generate_content(model=m, contents=prompt, config=cfg))
+
+        owners: dict[asyncio.Task, str] = {}
+        t1 = call(m1)
+        owners[t1] = m1
+        end = time.monotonic() + timeout
+        first_exc: BaseException | None = None
+        try:
+            if m2 and hedge_after < timeout:
+                done, _ = await asyncio.wait({t1}, timeout=hedge_after)
+                if not done:
+                    await self._space_out()
+                    owners[call(m2)] = m2
+            pending = set(owners)
+            while pending:
+                rem = end - time.monotonic()
+                if rem <= 0:
+                    break
+                done, pending = await asyncio.wait(pending, timeout=rem, return_when=asyncio.FIRST_COMPLETED)
+                for t in done:
+                    exc = t.exception()
+                    if exc is None:
+                        return t.result(), owners[t]
+                    if owners[t] == m1:
+                        first_exc = exc
+                    else:
+                        self._note_failure(owners[t], exc)
+            for t, m in owners.items():
+                if not t.done() and m != m1:
+                    _mark_cooling(m, self.s.model_cooldown_s)  # the hedge stalled too
+            if first_exc is not None:
+                raise first_exc
+            raise asyncio.TimeoutError()
+        finally:
+            for t in owners:
+                if not t.done():
+                    t.cancel()
 
     def usable_chain(self, tier: str) -> list[str]:
         """Skip exhausted models; put cooling (recently overloaded) models last instead of dropping them."""
@@ -146,6 +198,7 @@ class GeminiLLM:
         t0 = time.monotonic()
         deadline = t0 + (timeout if timeout else s.llm_timeout_s)
         per_attempt = s.llm_attempt_timeout_fast_s if tier == "fast" else s.llm_attempt_timeout_draft_s
+        hedge_after = s.llm_hedge_after_fast_s if tier == "fast" else s.llm_hedge_after_draft_s
         level = s.llm_effort_draft if tier == "draft" else s.llm_effort_fast
         json_schema = inline_schema(schema.model_json_schema())
         prompt = user
@@ -169,10 +222,14 @@ class GeminiLLM:
                 response_mime_type="application/json", response_json_schema=json_schema,
                 thinking_config=types.ThinkingConfig(thinking_level=level))
             await self._space_out()
+            hedge = next((m for m in models[mi + 1:] + models[:mi] if m != model and not _cooling(m)), None)
             try:
-                resp = await asyncio.wait_for(
-                    self.client.aio.models.generate_content(model=model, contents=prompt, config=cfg),
-                    timeout=max(1.0, min(per_attempt, left())))
+                resp, used = await self._attempt(model, hedge, prompt, cfg, max(1.0, min(per_attempt, left())),
+                                                 hedge_after)
+                if used != model:
+                    skipped.append(f"{model} (slow - answered by {used} via a parallel request)")
+                    _mark_cooling(model, s.model_cooldown_s / 2)
+                    model = used
             except errors.APIError as e:
                 code = getattr(e, "code", None)
                 if code in (401, 403):

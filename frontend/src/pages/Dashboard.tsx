@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Database, Search } from "lucide-react";
 import { api, RunSummary } from "../api";
+import { useProfiles } from "../state";
 import { EDGE_LABEL, fmtCost, fmtDate, fmtMs, fmtPct, OUTCOME_LABEL, outcomeTone, ROUTE_LABEL, routeTone, STATUS_LABEL, statusTone } from "../format";
 
 export default function Dashboard() {
@@ -9,16 +10,21 @@ export default function Dashboard() {
   const [m, setM] = useState<any>(null);
   const [rows, setRows] = useState<RunSummary[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const { profiles, current } = useProfiles();
+  const [scope, setScope] = useState<string>("current");   // "current" | "all" | a profile id
   const [f, setF] = useState({ q: "", status: "", route: "", outcome: "", edge: "", mode: "" });
+  const profileParam = scope === "current" ? current?.id || "" : scope;
 
   useEffect(() => {
+    if (!profileParam) return;
+    const ac = new AbortController();
     const t = setTimeout(() => {
-      const qs = new URLSearchParams(Object.entries(f).filter(([, v]) => v) as any).toString();
-      Promise.all([api(`/api/runs?limit=200&${qs}`), api("/api/metrics")])
-        .then(([r, mm]) => { setRows(r.items); setM(mm); setErr(null); }).catch((e) => setErr(e.message));
+      const qs = new URLSearchParams({ ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)), profile: profileParam }).toString();
+      Promise.all([api(`/api/runs?limit=200&${qs}`, { signal: ac.signal }), api(`/api/metrics?profile=${profileParam}`, { signal: ac.signal })])
+        .then(([r, mm]) => { setRows(r.items); setM(mm); setErr(null); }).catch((e) => { if (e?.name !== "AbortError") setErr(e.message); });
     }, 200);
-    return () => clearTimeout(t);
-  }, [f]);
+    return () => { clearTimeout(t); ac.abort(); };
+  }, [f, profileParam]);
   // refresh while something is running
   useEffect(() => {
     if (!rows?.some((r) => ["queued", "running"].includes(r.status))) return;
@@ -34,8 +40,16 @@ export default function Dashboard() {
   return (
     <div className="stack-lg">
       <div className="row-between">
-        <div><div className="eyebrow">Across all runs</div><h1 style={{ marginTop: 6 }}>Dashboard</h1></div>
-        <Link to="/" className="btn">New run <ArrowRight size={16} className="arrow" /></Link>
+        <div><div className="eyebrow">{scope === "all" ? "Across all seller profiles" : `Runs for ${scope === "current" ? current?.name || "…" : profiles?.find((p) => p.id === scope)?.name}`}</div>
+          <h1 style={{ marginTop: 6 }}>Dashboard</h1></div>
+        <div className="row">
+          <select className="select compact" value={scope} onChange={(e) => setScope(e.target.value)} aria-label="Seller profile">
+            <option value="current">Current profile{current ? ` (${current.name})` : ""}</option>
+            <option value="all">All profiles</option>
+            {profiles?.filter((p) => p.id !== current?.id).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <Link to="/" className="btn">New run <ArrowRight size={16} className="arrow" /></Link>
+        </div>
       </div>
       {err && <div className="callout bad">{err}</div>}
 
@@ -44,9 +58,9 @@ export default function Dashboard() {
           ["Runs", m?.runs ?? "—", m ? `${m.statuses?.awaiting_review || 0} awaiting review` : ""],
           ["Approval rate", fmtPct(m?.approval_rate), m ? `${m.approved} of ${m.reviewed} reviewed` : ""],
           ["Edit rate", fmtPct(m?.edit_rate), m ? `${m.edited} approved after edits` : ""],
-          ["Median duration", fmtMs(m?.median_duration_ms), "active processing time"],
-          ["Avg cost / run", fmtCost(m?.avg_cost_usd), m ? `${fmtCost(m.total_cost_usd)} total` : ""],
-          ["Failed", m?.failed ?? "—", m ? `${m.statuses?.awaiting_rep || 0} waiting on rep` : ""],
+          ["Avg duration", fmtMs(m?.avg_duration_ms), m?.p90_duration_ms ? `p90 ${fmtMs(m.p90_duration_ms)} · active time` : "active processing time"],
+          [`Within ${m?.budget_s ?? 90} s`, fmtPct(m?.within_budget_rate), m ? `${m.timed_out} timed out · ${m.cancelled} stopped` : ""],
+          ["Failed", m?.failed ?? "—", m ? `${m.statuses?.awaiting_rep || 0} waiting on rep · ${fmtCost(m.total_cost_usd)} spent` : ""],
         ].map(([l, v, s]) => (
           <div key={l as string} className="tile"><div className="eyebrow">{l}</div><div className="metric">{m ? v : <span className="skeleton" style={{ display: "inline-block", width: 60, height: 24 }} />}</div><div className="small muted">{s}</div></div>
         ))}
@@ -93,7 +107,7 @@ export default function Dashboard() {
                   {rows.map((r) => (
                     <tr key={r.id} className="clickable" onClick={() => nav(`/runs/${r.id}`)}>
                       <td><Link to={`/runs/${r.id}`} style={{ textDecoration: "none" }} onClick={(e) => e.stopPropagation()}><strong style={{ fontWeight: 500 }}>{r.prospect.name}</strong></Link>
-                        <div className="small muted">{r.prospect.company}{r.mode === "replay" && <> · <Database size={11} /> replay</>}</div></td>
+                        <div className="small muted">{r.prospect.company}{r.mode === "replay" && <> · <Database size={11} /> replay</>}{scope === "all" && r.seller_name ? <> · {r.seller_name}</> : null}</div></td>
                       <td><span className={`pill ${statusTone(r.status)}`}>{STATUS_LABEL[r.status] || r.status}</span></td>
                       <td>{r.route_path.length ? <span className={`pill ${routeTone(r.final_route)}`}>{r.route_path.map((x) => ROUTE_LABEL[x] || x).join(" → ")}</span> : <span className="muted">—</span>}</td>
                       <td>{r.outcome ? <span className={`pill ${outcomeTone(r.outcome)}`}>{OUTCOME_LABEL[r.outcome]}</span> : <span className="muted small">open</span>}</td>

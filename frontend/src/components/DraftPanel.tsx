@@ -48,6 +48,7 @@ export default function DraftPanel({ run, onDone }: { run: RunDetail; onDone: ()
   const [subject, setSubject] = useState(initial.subject);
   const [body, setBody] = useState(initial.body);
   const [ack, setAck] = useState(false);
+  const [ackIncomplete, setAckIncomplete] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [instruction, setInstruction] = useState("");
@@ -68,7 +69,7 @@ export default function DraftPanel({ run, onDone }: { run: RunDetail; onDone: ()
   const act = async (action: string, extra: any = {}) => {
     setBusy(action); setErr(null);
     try {
-      await post(`/api/runs/${run.id}/review`, { action, subject, body, acknowledged_sensitive: ack, ...extra });
+      await post(`/api/runs/${run.id}/review`, { action, subject, body, acknowledged_sensitive: ack, acknowledged_incomplete: ackIncomplete, ...extra });
       if (action === "edit") setEditing(false);
       onDone();
     } catch (e: any) { setErr(e.message); } finally { setBusy(null); }
@@ -77,6 +78,7 @@ export default function DraftPanel({ run, onDone }: { run: RunDetail; onDone: ()
     try { await navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ }
   };
   const ver = d.verification;
+  const incomplete = !ver || !!(run.interrupted?.incomplete?.length);
   const gen = d.genericness;
   const finalReview = [...run.reviews].reverse().find((r) => r.action === "approve" || r.action === "reject");
 
@@ -85,6 +87,9 @@ export default function DraftPanel({ run, onDone }: { run: RunDetail; onDone: ()
       {run.personalisation === "company" && <div className="callout warn"><AlertTriangle size={16} /><div><strong>Lower personalisation.</strong> Nothing usable was found about {run.prospect.name} personally, so this draft uses a company-level signal.</div></div>}
       {needsAck && <div className="callout bad"><ShieldAlert size={16} /><div><strong>Sensitive situation.</strong> Recent news about {run.prospect.company} is sensitive ({sensSig?.sensitive?.category?.replace("_", " ")}{sensSig ? <>: <a href={sensSig.url} target="_blank" rel="noreferrer">{sensSig.title}</a></> : null}). It was not used as a hook and the tone was adapted. Read carefully before approving.</div></div>}
       {route.sensitive_mode === "avoided" && <div className="callout info"><ShieldAlert size={16} /><div>A sensitive item ({sensSig?.sensitive?.category?.replace("_", " ")}) was deliberately <strong>not</strong> used as the hook; the draft uses the best safe alternative.</div></div>}
+      {incomplete && <div className="callout bad"><AlertTriangle size={16} /><div><strong>Incomplete draft.</strong> {run.interrupted?.message}{" "}
+        {!ver ? "Its claims were NOT fact-checked — treat every statement as unverified." : "Some checks did not run."} Regenerate it, or read it
+        carefully before approving.</div></div>}
       {ver && ver.unsupported > 0 && <div className="callout bad"><XCircle size={16} /><div><strong>{ver.unsupported} claim{ver.unsupported > 1 ? "s" : ""} could not be verified</strong> after {ver.rounds} rewrite{ver.rounds === 1 ? "" : "s"}. Remove or fix {ver.unsupported > 1 ? "them" : "it"} before using this draft.</div></div>}
       {gen?.generic && <div className="callout warn"><AlertTriangle size={16} /><div><strong>Reads as generic.</strong> {gen.reasons.join(" ")}</div></div>}
 
@@ -109,6 +114,10 @@ export default function DraftPanel({ run, onDone }: { run: RunDetail; onDone: ()
             <div className="email-body">{body}</div>
           </div>
         )}
+        {incomplete && open && (
+          <label className="check callout neutral"><input type="checkbox" checked={ackIncomplete} onChange={(e) => setAckIncomplete(e.target.checked)} />
+            <span>I understand this draft was not fully checked and I've verified its facts myself.</span></label>
+        )}
         {needsAck && open && (
           <label className="check callout neutral"><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
             <span>I've read the sensitive context and confirm the tone of this message is appropriate.</span></label>
@@ -124,7 +133,7 @@ export default function DraftPanel({ run, onDone }: { run: RunDetail; onDone: ()
               <button className="btn secondary sm" disabled={!!busy} onClick={() => setShowRegen((v) => !v)}><RefreshCw size={14} /> Regenerate</button>
               <button className="btn danger sm" disabled={!!busy} onClick={() => act("reject")}><X size={14} /> Reject</button>
             </div>
-            <button className="btn" disabled={!!busy || (needsAck && !ack)} onClick={() => act("approve")}>
+            <button className="btn" disabled={!!busy || (needsAck && !ack) || (incomplete && !ackIncomplete)} onClick={() => act("approve")}>
               <Check size={16} /> {changed ? "Approve with edits" : "Approve"}</button>
           </div>
         ) : (

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Check, ChevronRight, Circle, Hand, Loader2, Minus, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, Circle, Hand, Loader2, Minus, Square, Timer, X } from "lucide-react";
 import { StageRow } from "../api";
-import { fmtCost, fmtMs, fmtNum } from "../format";
+import { fmtCost, fmtMs, fmtNum, parseTs } from "../format";
 
 const WHAT: Record<string, string> = {
   identity: "Confirms the person, company and current role from public sources.",
@@ -21,6 +21,8 @@ function Icon({ s }: { s: string }) {
   if (s === "failed") return <X size={15} strokeWidth={2.5} />;
   if (s === "waiting") return <Hand size={14} />;
   if (s === "skipped") return <Minus size={14} />;
+  if (s === "cancelled") return <Square size={10} fill="currentColor" />;
+  if (s === "timed_out") return <Timer size={14} />;
   return <Circle size={8} fill="currentColor" />;
 }
 
@@ -28,7 +30,7 @@ function Elapsed({ since }: { since?: string }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 250); return () => clearInterval(t); }, []);
   if (!since) return null;
-  return <span className="mono small muted">{fmtMs(Math.max(0, now - new Date(since).getTime()))}</span>;
+  return <span className="mono small muted">{fmtMs(Math.max(0, now - parseTs(since).getTime()))}</span>;
 }
 
 export default function Timeline({ stages, progress }: { stages: StageRow[]; progress: Record<string, string> }) {
@@ -50,8 +52,10 @@ export default function Timeline({ stages, progress }: { stages: StageRow[]; pro
                 {s.status === "running" && <div className="live pulse">{progress[s.key] || "Working…"}</div>}
                 {s.status === "pending" && <div>{WHAT[s.key]}</div>}
                 {s.status === "failed" && <div className="callout bad small" style={{ marginTop: 4 }}><AlertTriangle size={14} /><div><strong>This stage failed.</strong> {s.error}</div></div>}
-                {s.status !== "pending" && s.status !== "running" && s.explanation && s.status !== "failed" && <div style={{ color: "var(--ink)" }}>{s.explanation}</div>}
-                {(s.status === "succeeded" || s.status === "failed") && (
+                {(s.status === "cancelled" || s.status === "timed_out") && <div className={`callout ${s.status === "cancelled" ? "neutral" : "warn"} small`} style={{ marginTop: 4 }}>
+                  {s.status === "cancelled" ? <Square size={12} fill="currentColor" /> : <Timer size={14} />}<div>{s.error}</div></div>}
+                {s.status !== "pending" && s.status !== "running" && s.explanation && !["failed", "cancelled", "timed_out"].includes(s.status) && <div style={{ color: s.status === "skipped" ? "var(--ink-muted)" : "var(--ink)" }}>{s.explanation}</div>}
+                {["succeeded", "failed", "cancelled", "timed_out"].includes(s.status) && (
                   <details className="tech">
                     <summary><ChevronRight size={12} /> Technical details</summary>
                     <div className="small muted" style={{ marginTop: 4 }}>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowRight, Database, FlaskConical, Globe, Info, Pencil } from "lucide-react";
 import { api, post, Prospect, Scenario } from "../api";
+import { useProfiles } from "../state";
 import { EDGE_LABEL, ROUTE_LABEL, routeTone } from "../format";
 
 const EMPTY: Prospect = { name: "", company: "", role: "", linkedin_url: "", notes: "" };
@@ -16,11 +17,10 @@ export default function NewRun() {
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [scenarios, setScenarios] = useState<Scenario[] | null>(null);
-  const [seller, setSeller] = useState<any>(null);
+  const { current, profiles } = useProfiles();
 
   useEffect(() => {
     api<Scenario[]>("/api/scenarios").then(setScenarios).catch(() => setScenarios([]));
-    api("/api/seller-profile").then((r) => setSeller(r.data)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -119,13 +119,16 @@ export default function NewRun() {
           </div>
 
           <div className="card stack">
-            <div className="row-between"><h3>Drafts are written for</h3><Link to="/seller" className="btn secondary sm"><Pencil size={13} /> Edit</Link></div>
-            {!seller ? <div className="skeleton" style={{ height: 60 }} /> : (
+            <div className="row-between"><h3>Drafts are written for</h3><Link to="/profiles" className="btn secondary sm"><Pencil size={13} /> Manage</Link></div>
+            {!current ? <div className="skeleton" style={{ height: 60 }} /> : (
               <>
-                <p className="small"><strong>{seller.company_name}</strong> — {seller.product}</p>
-                <p className="small muted">As the PS-3 brief asks, the seller is a clearly fictional AP-automation company,
-                  so no real company's claims are put into drafts. Edit the profile to try a different seller — every
-                  proof point can be quoted word-for-word, so keep them true.</p>
+                <div className="row"><span className="profile-avatar sm">{current.name.slice(0, 1).toUpperCase()}</span>
+                  <strong>{current.name}</strong>{profiles && profiles.length > 1 && <span className="chip">{profiles.length} profiles · switch in the top bar</span>}</div>
+                <p className="small">{current.data.product}</p>
+                {current.data.fictional_notice
+                  ? <p className="small muted">{current.data.fictional_notice} As the PS-3 brief asks, the sample seller is fictional,
+                      so no real company's claims are put into drafts.</p>
+                  : <p className="small muted">Proof points in this profile can be quoted word-for-word in drafts — keep them true.</p>}
               </>
             )}
           </div>
