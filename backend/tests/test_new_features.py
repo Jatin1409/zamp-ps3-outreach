@@ -472,3 +472,26 @@ async def test_failed_optional_reask_does_not_sink_the_run(client, base):
     assert d["status"] == "awaiting_review"
     out = stage(d, "rank")["output"]
     assert [r["sid"] for r in out["ranking"]] == ["s2"] and [u["sid"] for u in out["unscored"]] == ["s1"]
+
+
+async def test_stop_reaches_a_run_executing_in_another_process(client, base):
+    """The API process only sets cancel_requested; the worker that owns the run polls for it and interrupts."""
+    from app.db import session
+    from app.models import Run
+    from app.pipeline.context import RunContext
+    from app.pipeline.runner import RUNNING
+
+    rid = await create(client, base)
+    ctx = RunContext(rid, None, None, "live")          # stands in for the job running in the other process
+    RUNNING[rid] = ctx
+    try:
+        async with session() as s:
+            row = await s.get(Run, rid)
+            row.cancel_requested = True
+            await s.commit()
+        await jobs.poll_cancellations()
+        assert ctx.cancel_reason == "user"
+        ctx.interrupt("timeout")                      # a second interrupt never overrides the first
+        assert ctx.cancel_reason == "user"
+    finally:
+        RUNNING.pop(rid, None)

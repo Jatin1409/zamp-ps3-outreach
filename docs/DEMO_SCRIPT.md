@@ -71,7 +71,7 @@ After it resumes and drafts:
 | 3 | Edge — outdated role | Sarah Riley · dbt Labs · CFO → choose **Continue with the new details** | `ask_rep → draft_with_warning` | input kept, conflict view, evidence quotes; then sensitive acknowledgement |
 | 4 | Edge — sensitive news | Kelly Steckelberg · Canva · CFO | `draft_with_warning` (R3) | layoff item marked ineligible; red callout; Approve disabled until tick |
 | 5 | Edge — thin signal (company fallback) | Marta Kowalczyk · Rosenbauer International · Head of Accounts Payable | `draft_with_warning` (R5) | identity not found; company hook; "Lower personalisation" callout |
-| 5b | Edge — nothing usable | Tomas Lindqvist · Brightwater Fasteners GmbH · Finance Director | `do_not_draft` (R2) | "Recommend not sending" + what's missing; every dropped item has a reason; "Add notes and run again" |
+| 5b | Edge — nothing found | Tomas Lindqvist · Brightwater Fasteners GmbH · Finance Director | `do_not_draft` (R0), ~10 s | "Couldn't find this person or company" + what was checked; checklist shows person and company "not verified"; research skipped; "Add notes and run again" |
 | 6 | Edge — ambiguous identity | Michael Brown · Deloitte · Partner | `ask_rep` (paused) | candidate cards with verified/unverified quotes; pick one (research follows that person's current company) or **None of these — stop** → `do_not_draft` |
 | 6b | Edge — fictional character | Tony Stark · Stark Industries · CEO | `do_not_draft` (R0), ~5-10 s | "In fiction" vs "In the real world" columns; real namesake companies listed |
 | 6c | Stop mid-run | start any uncached prospect, press **Stop run** during Gather/Filter | `Stopped` | stage marked stopped, later ones "not run", results kept; Resume / Start fresh |
