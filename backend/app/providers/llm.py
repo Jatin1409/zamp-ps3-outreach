@@ -124,7 +124,20 @@ class FixtureLLM:
     name = "fixture"
 
     def __init__(self, fixture: dict):
-        self.responses: dict[str, list[dict]] = {k: list(v) for k, v in fixture.get("llm", {}).items()}
+        self.responses: dict[str, list[dict]] = {}
+        for k, v in fixture.get("llm", {}).items():
+            v = list(v)
+            # Batched judgements (filter/rank) run in parallel, so call order isn't stable: serve the union of every
+            # recorded batch for that purpose; the stage only keeps judgements for the items each batch asked about.
+            if len(v) > 1 and all(isinstance(x, dict) and set(x) == {"judgments"} for x in v):
+                seen, merged = set(), []
+                for x in v:
+                    for j in x["judgments"]:
+                        if j.get("sid") not in seen:
+                            seen.add(j.get("sid"))
+                            merged.append(j)
+                v = [{"judgments": merged}]
+            self.responses[k] = v
         self.calls: list[str] = []
         self.fail_purposes: set[str] = set(fixture.get("fail_llm", []))
         self.delays: dict[str, float] = fixture.get("llm_delay_s", {})  # simulated latency per purpose

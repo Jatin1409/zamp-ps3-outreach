@@ -71,6 +71,12 @@ export function FictionPanel({ run }: { run: RunDetail }) {
         <div className="card-sunken stack">
           <div className="row"><Globe2 size={15} /><strong>In the real world</strong></div>
           <p className="small">{f.real_world}</p>
+          {f.real_companies?.map((c: any) => (
+            <div key={c.name + c.what_it_does} className="stack" style={{ gap: 6 }}>
+              <div className="small"><strong>{c.name}</strong>{c.what_it_does ? ` — ${c.what_it_does}` : ""} <span className="chip">real</span></div>
+              <Facts facts={c.evidence} />
+            </div>
+          ))}
           <p className="small muted">If you meant a real person who shares this name, add their company and role (or paste a
             post in the notes) and run again.</p>
         </div>
@@ -92,7 +98,7 @@ export function InterruptedPanel({ run, onRetry, onRerun, busy }: { run: RunDeta
         {run.signals.length ? ` (${run.signals.length} sources)` : ""}.
         {timeout ? " This usually means the AI provider was slow; trying again often works." : ""}</p>
       <div className="row">
-        <button className="btn" disabled={busy} onClick={onRetry}>Resume from “{i?.stage || "start"}”</button>
+        <button className="btn" disabled={busy} onClick={onRetry}>Resume from “{run.stages.find((x) => x.key === i?.stage)?.label || "the start"}”</button>
         <button className="btn secondary" disabled={busy} onClick={onRerun}>Start a fresh run</button>
       </div>
     </div>

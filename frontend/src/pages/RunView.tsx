@@ -63,7 +63,7 @@ function Header({ run, connected, onStop, stopping, onRerun, rerunning }: {
         <div className="row">
           <span className={`pill ${statusTone(run.status)}`}>{live && <Loader2 size={12} className="spin" />}{STATUS_LABEL[run.status] || run.status}</span>
           {run.final_route && <span className={`pill ${routeTone(run.final_route)}`}>Route: {run.route_path.map((r) => ROUTE_LABEL[r] || r).join(" → ")}</span>}
-          {run.outcome && <span className="pill outline">{OUTCOME_LABEL[run.outcome] || run.outcome}</span>}
+          {run.outcome && OUTCOME_LABEL[run.outcome] !== STATUS_LABEL[run.status] && <span className="pill outline">{OUTCOME_LABEL[run.outcome] || run.outcome}</span>}
           {stoppable && <button className="btn stop" onClick={onStop} disabled={stopping} aria-label="Stop this run">
             {stopping ? <Loader2 size={15} className="spin" /> : <Square size={13} fill="currentColor" />} {stopping ? "Stopping…" : "Stop run"}</button>}
           {!stoppable && <button className="btn secondary sm" onClick={onRerun} disabled={rerunning}><RotateCcw size={14} /> Run again</button>}

@@ -424,3 +424,21 @@ async def test_verification_checklist_reports_what_could_not_be_verified(client,
     claims = d["drafts"][-1]["verification"]["claims"]
     assert not [c for c in claims if c["kind"] == "prospect_fact" and c["supported"]
                 and c.get("source_id") == "s2"]
+
+
+async def test_fictional_person_with_real_namesake_company_is_described_accurately(client, base):
+    fx = fictional_fx(base)
+    fx["search"]["*"].append({"title": "Stark Industries Houston", "url": "https://starkindustries.example.com/about",
+                              "content": "Stark Industries is a compressor manufacturer based in Houston, Texas.",
+                              "raw_content": None, "published_date": None})
+    fx["llm"]["identity"][0]["companies"].append(
+        {"name": "Stark Industries", "what_it_does": "compressor manufacturer", "short_label": "Houston",
+         "is_fictional": False, "fiction_source": "",
+         "evidence": [{"source": 1, "quote": "Stark Industries is a compressor manufacturer based in Houston, Texas."}]})
+    rid = await create(client, fx, prospect={"name": "Tony Stark", "company": "Stark Industries"})
+    await jobs.drain()
+    d = await get(client, rid)
+    f = d["identity"]["fiction"]
+    assert d["identity"]["status"] == "fictional"
+    assert "do exist" in f["real_world"] and "compressor manufacturer" in f["real_world"]
+    assert f["real_companies"][0]["evidence"][0]["verified"]

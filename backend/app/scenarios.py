@@ -67,9 +67,18 @@ SCENARIOS: list[dict] = [
         "title": "Edge case — nothing usable (do not draft)",
         "description": "A prospect at a company with no public footprint. Rather than invent a reason to write, "
                        "the process recommends not sending and lists what is missing.",
-        "expected_route": "do_not_draft", "edge_case": "thin_signal",
+        "expected_route": "do_not_draft", "edge_case": "company_not_found",
         "prospect": {"name": "Tomas Lindqvist", "company": "Brightwater Fasteners GmbH", "role": "Finance Director"},
-        "demo_note": "Fictional company; verified 2026-11-05 that search finds nothing usable.",
+        "demo_note": "Invented company; verified that search finds neither the person nor the company, so the run "
+                     "stops at identity and says exactly what it checked.",
+    },
+    {
+        "key": "fictional_stark",
+        "title": "Edge case — fictional character",
+        "description": "A famous fictional character at a fictional company. Identified as fiction, nothing drafted; "
+                       "facts from fiction are kept apart from the real world (real companies share the name).",
+        "expected_route": "do_not_draft", "edge_case": "fictional_entity",
+        "prospect": {"name": "Tony Stark", "company": "Stark Industries", "role": "CEO"},
     },
     {
         "key": "sensitive_canva",

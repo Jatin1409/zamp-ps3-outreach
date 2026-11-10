@@ -71,8 +71,9 @@ def build_checks(p: dict, person: dict, company: dict, chosen: dict | None, chos
         checks.append({"key": "company", "label": f"Company: {p['company']}",
                        "status": {"found": "verified", "not_found": "not_verified", "ambiguous": "conflict",
                                   "fictional": "fictional"}[cs],
-                       "detail": (f"{chosen_co['name']} - {chosen_co['what_it_does']}" if chosen_co and
-                                  chosen_co.get("what_it_does") else " ".join(company.get("reasons", [])))})
+                       "detail": ((("Fictional: " if cs == "fictional" else "") + f"{chosen_co['name']} - "
+                                   f"{chosen_co['what_it_does']}") if chosen_co and chosen_co.get("what_it_does")
+                                  else " ".join(company.get("reasons", [])))})
     return checks
 
 
@@ -163,12 +164,31 @@ async def stage_identity(ctx: RunContext, run: Run) -> dict:
         if gate == "fictional":
             fc = next((c for c in cand_out if c.get("is_fictional") and c["verified_sources"]), None)
             fk = next((c for c in comp_out if c.get("is_fictional") and c["verified_sources"]), None)
+            real_people = [c for c in cand_out if not c.get("is_fictional") and c["verified_sources"]
+                           and c["name_matches"]]
+            real_cos = [c for c in comp_out if not c.get("is_fictional") and c["verified_sources"]
+                        and c["name_matches"]]
+            # Say exactly what does exist in the real world - e.g. real companies that share a fictional name.
+            parts = []
+            if real_cos:
+                parts.append(f"Real organisations called {p['company']} do exist ("
+                             + "; ".join(f"{c['name']}: {c.get('what_it_does') or c.get('short_label') or 'no description'}"
+                                         for c in real_cos[:3]) + f"), but no real {p['name']} was found at them.")
+            if real_people:
+                parts.append("Real people with this name were found elsewhere: "
+                             + "; ".join(f"{c['full_name']} ({c.get('current_role') or 'role unknown'}, "
+                                         f"{c.get('current_company') or 'company unknown'})" for c in real_people[:3])
+                             + ".")
+            if not parts:
+                parts.append("No real person or company matching this input was found in public sources.")
             fiction = {
                 "person": ({"name": fc["full_name"], "source": fc.get("fiction_source"),
                             "facts": [e for e in fc["evidence"] if e["verified"]]} if fc else None),
                 "company": ({"name": fk["name"], "source": fk.get("fiction_source"),
                              "facts": [e for e in fk["evidence"] if e["verified"]]} if fk else None),
-                "real_world": "No real person or company matching this input was found in public sources.",
+                "real_world": " ".join(parts),
+                "real_companies": [{"name": c["name"], "what_it_does": c.get("what_it_does"),
+                                    "evidence": [e for e in c["evidence"] if e["verified"]]} for c in real_cos[:3]],
             }
         identity = {**person, "status": gate, "person_status": dec.status, "company": company,
                     "candidate_details": cand_out, "summary": ext.summary, "fiction": fiction,
