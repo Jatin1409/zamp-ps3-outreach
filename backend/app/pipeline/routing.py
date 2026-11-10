@@ -98,6 +98,15 @@ def decide_identity(cands: list[CandidateView], has_input_role: bool, conflictin
             "not the company you entered."], chosen=c.id, candidates=[c.id], conflict_kind="company_change")
 
     c = at_company[0]
+    if has_input_role and c.role_matches_input == "no" and len(plausible) >= 2:
+        # The one namesake at the company holds a different role and other namesakes exist: we can't tell which
+        # person the rep means (seen live: Michael Brown at Deloitte - a Senior Manager plus two former staff,
+        # none a Partner). Ask, rather than assume the rep's role is out of date.
+        return IdentityDecision("ambiguous", "low", reasons + [
+            f"{len(plausible)} different people with this name were found and none holds the role you entered: "
+            + "; ".join(f"{x.full_name} ({x.current_role or 'role unknown'}"
+                        f"{', ' + x.current_company if x.current_company else ''})" for x in plausible)],
+            candidates=[x.id for x in plausible])
     if has_input_role and c.role_matches_input == "no":
         return IdentityDecision("role_conflict", "low", reasons + [
             f"{c.full_name} is at the company, but sources give a different role: {c.current_role}."],

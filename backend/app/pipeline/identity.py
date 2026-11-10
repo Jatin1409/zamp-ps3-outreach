@@ -144,6 +144,10 @@ async def stage_identity(ctx: RunContext, run: Run) -> dict:
 
         # ---- companies
         comp_views, comp_out = None, []
+        if ext.companies is None and company_searched and not _company_mentioned(p["company"], clean):
+            # the model skipped the company list; code can still tell when no source even names the company
+            ext.companies = []
+            h.output["company_decided_by"] = "code: no retrieved source mentions the company name"
         if ext.companies is not None and company_searched:
             comp_views = []
             for i, co in enumerate(ext.companies):
@@ -216,3 +220,13 @@ async def stage_identity(ctx: RunContext, run: Run) -> dict:
         }[gate]
     await update_run(run.id, identity=identity)
     return identity
+
+
+def _company_mentioned(company: str, sources: list[dict]) -> bool:
+    """True if any source text contains every distinctive word of the company name (legal suffixes ignored)."""
+    from .textmatch import company_tokens, normalize
+
+    toks = company_tokens(company)
+    if not toks:
+        return True
+    return any(all(t in normalize(s.get("_full") or s.get("text") or "") for t in toks) for s in sources)

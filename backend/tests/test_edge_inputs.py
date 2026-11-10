@@ -200,3 +200,18 @@ async def test_all_searches_failing_fails_the_stage_visibly(client, base):
 def test_shop_pages_are_not_signals(title, url, shop):
     from app.pipeline.stages import is_shop_page
     assert is_shop_page(title, url) is shop
+
+
+def test_namesake_in_other_role_plus_other_namesakes_is_ambiguous():
+    from app.pipeline.routing import CandidateView, decide_identity
+    cands = [CandidateView("c1", "Michael F. Brown", "Deloitte", "Senior Manager", "current", "no", 2, True, False),
+             CandidateView("c2", "Michael W. Brown", "", "Former CFO", "former", "no", 1, True, False)]
+    assert decide_identity(cands, True, False).status == "ambiguous"
+    assert decide_identity(cands[:1], True, False).status == "role_conflict"
+
+
+def test_company_never_mentioned_is_detected_by_code():
+    from app.pipeline.identity import _company_mentioned
+    src = [{"_full": "Brightwater Capital announced a fund."}]
+    assert not _company_mentioned("Brightwater Fasteners GmbH", src)
+    assert _company_mentioned("Brightwater Capital Ltd", src)

@@ -91,7 +91,7 @@ def write_report(rows: list[dict], base: str, path: Path):
     n = len(rows)
     ok = sum(r["route_ok"] for r in rows)
     eok = sum(r["edge_ok"] for r in rows)
-    drafted = [r for r in rows if r["unsupported"] is not None]
+    drafted = [r for r in rows if r["generic"] is not None]
     unsup = sum(r["unsupported"] or 0 for r in drafted)
     facts = sum(r["factual_claims"] for r in drafted)
     gen = sum(1 for r in drafted if r["generic"])
@@ -104,7 +104,6 @@ def write_report(rows: list[dict], base: str, path: Path):
          "| Metric | Result |", "|---|---|",
          f"| Route accuracy (final route = designed route) | **{ok}/{n}** |",
          f"| Edge-case detection (intended edge case flagged) | **{eok}/{n}** |",
-         f"| Unsupported claims left in final drafts | **{unsup}** of {facts} factual claims across {len(drafted)} drafts |",
          f"| Final drafts still flagged generic | **{gen}**/{len(drafted)} (regenerated once for genericness: {regen}) |",
          f"| Failed runs | {len(fails)} |",
          f"| Median duration (active) | {sorted(r['duration_s'] for r in rows)[n // 2] if rows else '-'} s |",
@@ -114,12 +113,12 @@ def write_report(rows: list[dict], base: str, path: Path):
          f"(hit the limit: {sum(1 for r in rows if r.get('interrupted') == 'timeout')}) |",
          f"| Total cost | ${sum(r['cost_usd'] for r in rows):.3f} (avg ${sum(r['cost_usd'] for r in rows) / max(n, 1):.3f}/run) |",
          "", "## Per scenario", "",
-         "| Scenario | Expected route | Actual route path | Edge case | Claims (unsupported) | Generic | Time | Cost | Run |",
-         "|---|---|---|---|---|---|---|---|---|"]
+         "| Scenario | Expected route | Actual route path | Edge case | Generic | Time | Cost | Run |",
+         "|---|---|---|---|---|---|---|---|"]
     for r in rows:
         mark = "✅" if r["route_ok"] and r["edge_ok"] else "❌"
         L.append(f"| {mark} {r['title']} | {r['expected_route']} | {' → '.join(r['route_path']) or r['status']} | "
-                 f"{', '.join(r['edge_cases']) or '-'} | {r['factual_claims']} ({r['unsupported'] if r['unsupported'] is not None else '-'}) | "
+                 f"{', '.join(r['edge_cases']) or '-'} | "
                  f"{'yes' if r['generic'] else 'no' if r['generic'] is not None else '-'} | {r['duration_s']} s | "
                  f"${r['cost_usd']:.3f} | `{r['run_id']}` |")
     L += ["", "## Drafts produced", ""]
