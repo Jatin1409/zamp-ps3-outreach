@@ -43,7 +43,14 @@ You identify which real person a sales rep means. You extract candidate people f
 - role_matches_input: compare the meaning, not the wording ('VP Finance' = 'Vice President of Finance').
   'no' only when function or level is clearly different. 'unknown' if no role was given or none found.
 - Every evidence quote must be copied verbatim from the numbered source. No quote, no evidence.
-- If no source mentions the person, return an empty candidates list."""
+- If no source mentions the person, return an empty candidates list.
+- is_fictional: true ONLY when a source explicitly presents the person as a character in a film, TV show, book,
+  comic or game (e.g. "is a fictional character in..."). A real actor who played a role is NOT fictional. When
+  fictional, quote the sentence that says so.
+- companies: list each distinct organisation whose name matches the company the rep entered (ignore unrelated
+  companies). Two organisations are distinct if they do different things or are based in different places. For a
+  fictional company (e.g. from a TV show), set is_fictional and quote the sentence that says so. Give one verbatim
+  evidence quote per company describing what it is. If no source describes the company, return an empty list."""
 
 
 def identity_user(prospect: dict, sources: list[dict]) -> str:

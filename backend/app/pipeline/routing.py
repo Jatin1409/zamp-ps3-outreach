@@ -26,6 +26,7 @@ class CandidateView:
     role_matches_input: str    # yes | no | unknown
     verified_sources: int      # distinct source URLs whose evidence quote was found in the text
     name_matches: bool
+    is_fictional: bool = False
 
 
 @dataclass
@@ -39,12 +40,21 @@ class IdentityDecision:
 
 
 def decide_identity(cands: list[CandidateView], has_input_role: bool, conflicting_sources: bool) -> IdentityDecision:
-    plausible = [c for c in cands if c.name_matches and c.verified_sources > 0]
+    verified = [c for c in cands if c.name_matches and c.verified_sources > 0]
     unverified = [c for c in cands if c.name_matches and c.verified_sources == 0]
     reasons: list[str] = []
     if unverified:
         reasons.append(f"{len(unverified)} candidate(s) ignored because their evidence quotes were not found in "
                        "the retrieved text")
+    fictional = [c for c in verified if c.is_fictional]
+    plausible = [c for c in verified if not c.is_fictional]
+    if fictional and not [c for c in plausible if c.at_input_company in ("current", "unclear")]:
+        f = fictional[0]
+        return IdentityDecision("fictional", "high", reasons + [
+            f"Sources describe {f.full_name} as a fictional character, and no real person with this name was "
+            "found at the company you entered."], chosen=f.id, candidates=[c.id for c in fictional])
+    if fictional:
+        reasons.append(f"Ignored a fictional character with the same name ({fictional[0].full_name}).")
     if not plausible:
         return IdentityDecision("not_found", "low",
                                 reasons + ["No public source links this name to this company. Continuing with "
@@ -112,6 +122,61 @@ def decide_identity(cands: list[CandidateView], has_input_role: bool, conflictin
         if has_input_role and c.role_matches_input == "unknown":
             reasons.append("Role could not be confirmed from sources.")
     return IdentityDecision("resolved", conf, reasons, chosen=c.id, candidates=[c.id])
+
+
+# --------------------------------------------------------------------------- company (also decision A)
+@dataclass
+class CompanyView:
+    id: str
+    name: str
+    label: str
+    verified_sources: int
+    name_matches: bool
+    is_fictional: bool = False
+
+
+@dataclass
+class CompanyDecision:
+    status: str                # found | not_found | ambiguous | fictional | unchecked
+    reasons: list[str]
+    chosen: str | None = None
+    candidates: list[str] = field(default_factory=list)
+
+
+def decide_company(comps: list[CompanyView] | None, person_status: str) -> CompanyDecision:
+    if comps is None:
+        return CompanyDecision("unchecked", ["Company was not checked separately."])
+    verified = [c for c in comps if c.name_matches and c.verified_sources > 0]
+    real = [c for c in verified if not c.is_fictional]
+    fict = [c for c in verified if c.is_fictional]
+    if not verified:
+        if person_status in ("resolved", "role_conflict", "ambiguous"):
+            return CompanyDecision("found", ["The company is identified through the person's own sources."])
+        return CompanyDecision("not_found", ["No public source describes a company with this name."])
+    if fict and not real:
+        return CompanyDecision("fictional", [f"Sources describe {fict[0].name} as a fictional company."],
+                               chosen=fict[0].id, candidates=[c.id for c in fict])
+    if len(real) >= 2 and person_status != "resolved":
+        return CompanyDecision("ambiguous", [
+            f"{len(real)} different organisations match this name: "
+            + "; ".join(f"{c.name} ({c.label or 'no description'})" for c in real)], candidates=[c.id for c in real])
+    reasons = [f"Identified as {real[0].name}" + (f" ({real[0].label})." if real[0].label else ".")]
+    if fict:
+        reasons.append("A fictional company with the same name was ignored.")
+    return CompanyDecision("found", reasons, chosen=real[0].id, candidates=[c.id for c in real])
+
+
+def identity_gate(person: IdentityDecision, company: CompanyDecision) -> str:
+    """Combine person + company checks into what happens next, most important first."""
+    if person.status == "fictional" or company.status == "fictional":
+        return "fictional"            # never draft to a fictional entity
+    if company.status == "ambiguous":
+        return "ambiguous_company"    # ask which organisation before researching
+    if person.status in ("ambiguous", "role_conflict"):
+        return person.status          # ask the rep
+    if person.status == "not_found" and company.status == "not_found":
+        return "nothing_found"        # neither person nor company exists in public sources
+    return person.status              # resolved | not_found -> research continues
 
 
 # --------------------------------------------------------------------------- route (decision B)

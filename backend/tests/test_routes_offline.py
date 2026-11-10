@@ -172,9 +172,13 @@ async def test_thin_signal_nothing_do_not_draft(client, base):
     fx["llm"]["identity"] = [{"candidates": [], "conflicting_sources": False, "summary": "none"}]
     rid, d = await run(client, fx, prospect={"name": "Tomas Lindqvist", "company": "Brightwater Fasteners"})
     assert d["status"] == "completed" and d["outcome"] == "not_drafted"
-    assert d["final_route"] == "do_not_draft" and d["identity"]["status"] == "not_found"
-    assert stage(d, "route")["output"]["missing"]
+    # neither person nor company exists in any source -> explicit "nothing found" stop, research skipped
+    assert d["final_route"] == "do_not_draft" and d["identity"]["status"] == "nothing_found"
+    assert d["identity"]["person_status"] == "not_found" and d["identity"]["company"]["status"] == "not_found"
+    assert stage(d, "route")["output"]["rule"] == "R0" and stage(d, "route")["output"]["missing"]
+    assert stage(d, "gather")["status"] == "skipped" and "company_not_found" in d["edge_cases"]
     assert d["drafts"] == []
+    assert {c["key"]: c["status"] for c in d["identity"]["checks"]}["company"] == "not_verified"
 
 
 # ------------------------------------------------------------------ edge case 4: sensitive signal

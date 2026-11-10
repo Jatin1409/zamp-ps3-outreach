@@ -130,9 +130,10 @@ class FixtureSearch:
     def __init__(self, fixture: dict):
         self.data: dict[str, list[dict]] = fixture.get("search", {})
         self.fail = bool(fixture.get("fail_search"))
+        self.delay = float(fixture.get("search_delay_s", 0))
 
     async def search(self, q: SearchQuery) -> list[SearchResult]:
-        await asyncio.sleep(0)
+        await asyncio.sleep(self.delay)
         if self.fail:
             raise SearchError("Simulated search outage", kind="unavailable")
         rows = self.data.get(q.key())

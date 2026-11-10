@@ -1,4 +1,5 @@
 """GeminiLLM behaviour with a fake SDK client (no network)."""
+import asyncio
 import json
 from types import SimpleNamespace as NS
 
@@ -34,6 +35,7 @@ def make(monkeypatch, items):
     monkeypatch.setenv("GEMINI_API_KEY", "fake")
     monkeypatch.setenv("LLM_MIN_INTERVAL_S", "0")
     get_settings.cache_clear()
+    G.reset_model_state()
     llm = G.GeminiLLM()
     fm = FakeModels(items)
     llm.client = NS(aio=NS(models=fm))
@@ -181,3 +183,45 @@ async def test_all_models_exhausted_fails_clearly(monkeypatch):
         await llm.complete(purpose="draft", system="s", user="u", schema=FilterBatch, tier="draft")
     assert ex.value.kind == "rate_limited" and "every configured model" in str(ex.value)
     G._exhausted_until.clear()
+
+
+async def test_circuit_breaker_skips_recently_overloaded_model_on_next_call(monkeypatch):
+    e503 = errors.ServerError(503, {"error": {"code": 503, "message": "high demand", "status": "UNAVAILABLE"}})
+    llm, fm = make(monkeypatch, [e503, resp(OK), resp(OK)])
+    await llm.complete(purpose="draft", system="s", user="u", schema=FilterBatch, tier="draft")
+    assert [c["model"] for c in fm.calls] == ["gemini-3.6-flash", "gemini-3.8-flash"]
+    # the next call goes straight to a healthy model - no time wasted rediscovering the overloaded one
+    await llm.complete(purpose="verify", system="s", user="u", schema=FilterBatch, tier="draft")
+    assert fm.calls[-1]["model"] == "gemini-3.8-flash"
+    assert "gemini-3.6-flash" in G.model_health()["cooling"]
+
+
+_real_sleep = asyncio.sleep  # make() swaps asyncio.sleep for a no-op to keep backoff tests fast
+
+
+class SlowModels(FakeModels):
+    async def generate_content(self, *, model, contents, config):
+        self.calls.append({"model": model, "contents": contents, "config": config})
+        if model == "gemini-3.5-flash-lite":
+            await _real_sleep(5)            # hangs
+        return resp(OK)
+
+
+async def test_hanging_model_is_abandoned_for_the_next_one(monkeypatch):
+    llm, _ = make(monkeypatch, [])
+    monkeypatch.setattr(get_settings(), "llm_attempt_timeout_fast_s", 0.3)
+    llm.client = NS(aio=NS(models=SlowModels([])))
+    t0 = asyncio.get_running_loop().time()
+    r = await llm.complete(purpose="filter", system="s", user="u", schema=FilterBatch, tier="fast")
+    assert r.model == "gemini-3.1-flash-lite" and asyncio.get_running_loop().time() - t0 < 2
+
+
+async def test_call_respects_the_overall_deadline(monkeypatch):
+    llm, _ = make(monkeypatch, [])
+    llm.client = NS(aio=NS(models=SlowModels([])))
+    monkeypatch.setattr(get_settings(), "gemini_fast_fallbacks", "")
+    monkeypatch.setattr(get_settings(), "gemini_model", "gemini-3.5-flash-lite")
+    monkeypatch.setattr(get_settings(), "gemini_fallbacks", "")
+    with pytest.raises(LLMError) as ex:
+        await llm.complete(purpose="filter", system="s", user="u", schema=FilterBatch, tier="fast", timeout=1.0)
+    assert ex.value.kind == "timeout"

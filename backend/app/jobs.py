@@ -72,6 +72,24 @@ async def execute(job: Job):
         await s.commit()
 
 
+async def poll_cancellations():
+    """A Stop recorded in the database (e.g. by another web process) reaches the job running it here."""
+    from .pipeline.runner import RUNNING
+
+    if not RUNNING:
+        return
+    try:
+        async with session() as s:
+            ids = set((await s.execute(select(Run.id).where(Run.id.in_(list(RUNNING)),
+                                                            Run.cancel_requested.is_(True)))).scalars())
+    except Exception:  # noqa: BLE001
+        return
+    for rid in ids:
+        ctx = RUNNING.get(rid)
+        if ctx:
+            ctx.interrupt("user")
+
+
 async def recover_interrupted():
     """On boot: anything 'running' was interrupted by a restart."""
     async with session() as s:
@@ -106,6 +124,7 @@ async def worker_loop(stop: asyncio.Event):
             log.exception("claim failed")
         if job is None:
             sem.release()
+            await poll_cancellations()
             _wakeup.clear()
             try:
                 await asyncio.wait_for(_wakeup.wait(), timeout=1.0)

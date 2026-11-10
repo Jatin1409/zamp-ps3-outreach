@@ -8,18 +8,19 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 
 from .db import session, utcnow
 from .jobs import enqueue
-from .models import Draft, Event, LLMCall, Review, Run, SearchRecord, SellerProfile, Signal, Stage
+from .models import Draft, Event, Job, LLMCall, Review, Run, SearchRecord, SellerProfile, Signal, Stage
 from .pipeline.context import STAGES, emit, prospect_key
 from .pipeline.lint import lint_draft
 from .pipeline.runner import init_stages
 from .pipeline.textmatch import levenshtein
 from .scenarios import SCENARIOS
 from .security import check_run_budget, client_id, require_access
-from .seed import LEDGERLINE, get_seller_profile
+from .config import get_settings
+from .profiles import SellerIn, resolve_profile, runs_of_profile_clause, update_profile
 
 router = APIRouter(prefix="/api")
 auth = [Depends(require_access)]
@@ -46,17 +47,6 @@ class ProspectIn(BaseModel):
         return v or None
 
 
-class SellerIn(BaseModel):
-    company_name: str = Field(max_length=120)
-    product: str = Field(max_length=2000)
-    ideal_customer: str = Field(max_length=2000)
-    problems_solved: list[str] = Field(max_length=12)
-    proof_points: list[str] = Field(max_length=12)
-    tone: str = Field(max_length=500)
-    sender_name: str = Field(max_length=120)
-    fictional_notice: str | None = None
-
-
 class RunIn(BaseModel):
     prospect: ProspectIn
     mode: Literal["live", "replay"] = "live"
@@ -64,7 +54,7 @@ class RunIn(BaseModel):
 
 
 class DecisionIn(BaseModel):
-    choice: Literal["pick", "use_new", "keep_original", "stop"]
+    choice: Literal["pick", "pick_company", "use_new", "keep_original", "stop"]
     candidate_id: str | None = None
 
 
@@ -75,6 +65,7 @@ class ReviewIn(BaseModel):
     note: str | None = Field(default=None, max_length=1000)
     instruction: str | None = Field(default=None, max_length=500)
     acknowledged_sensitive: bool = False
+    acknowledged_incomplete: bool = False
 
 
 class RetryIn(BaseModel):
@@ -104,30 +95,16 @@ async def auth_check(body: CodeIn):
 
 # --------------------------------------------------------------------------- seller profile
 @router.get("/seller-profile", dependencies=auth)
-async def get_profile():
-    p = await get_seller_profile()
+async def get_profile(request: Request):
+    """Backward compatible: the profile selected for this request (see app/profiles.py)."""
+    p = await resolve_profile(request)
     return {"id": p.id, "data": p.data, "updated_at": p.updated_at}
 
 
 @router.put("/seller-profile", dependencies=auth)
-async def put_profile(body: SellerIn):
-    p = await get_seller_profile()
-    async with session() as s:
-        row = await s.get(SellerProfile, p.id)
-        row.data = body.model_dump()
-        row.name = body.company_name
-        await s.commit()
-        return {"id": row.id, "data": row.data}
-
-
-@router.post("/seller-profile/reset", dependencies=auth)
-async def reset_profile():
-    p = await get_seller_profile()
-    async with session() as s:
-        row = await s.get(SellerProfile, p.id)
-        row.data, row.name = LEDGERLINE, "Ledgerline"
-        await s.commit()
-    return {"data": LEDGERLINE}
+async def put_profile(body: SellerIn, request: Request):
+    p = await resolve_profile(request)
+    return await update_profile(p.id, body)
 
 
 @router.get("/scenarios", dependencies=auth)
@@ -158,10 +135,10 @@ async def create_run(body: RunIn, request: Request):
     await check_run_budget(cid)
     if body.mode == "replay" and not await _has_saved(body.prospect.name, body.prospect.company):
         raise HTTPException(400, "No saved sources for this prospect yet. Run it once in live mode first.")
-    seller = (await get_seller_profile()).data
+    prof = await resolve_profile(request)
     async with session() as s:
-        run = Run(prospect=body.prospect.model_dump(), seller_profile=seller, mode=body.mode,
-                  scenario_key=body.scenario_key, client_id=cid, status="queued")
+        run = Run(prospect=body.prospect.model_dump(), seller_profile=dict(prof.data), seller_profile_id=prof.id,
+                  mode=body.mode, scenario_key=body.scenario_key, client_id=cid, status="queued")
         s.add(run)
         await s.commit()
         rid = run.id
@@ -180,15 +157,22 @@ def _run_summary(r: Run) -> dict:
         "active_ms": r.active_ms, "current_stage": r.current_stage, "scenario_key": r.scenario_key,
         "identity_confidence": (r.identity or {}).get("confidence"), "error": r.error,
         "llm_calls": r.llm_calls, "search_calls": r.search_calls,
+        "seller_profile_id": r.seller_profile_id or "default",
+        "seller_name": (r.seller_profile or {}).get("company_name"), "interrupted": r.interrupted,
+        "within_budget": (r.active_ms or 0) <= int(get_settings().run_budget_s * 1000),
     }
 
 
 @router.get("/runs", dependencies=auth)
 async def list_runs(q: str | None = None, status: str | None = None, route: str | None = None,
                     outcome: str | None = None, edge: str | None = None, mode: str | None = None,
-                    limit: int = 50, offset: int = 0):
+                    profile: str | None = None, limit: int = 50, offset: int = 0):
+    """profile: a seller-profile id (default: all profiles)."""
     async with session() as s:
-        rows = (await s.execute(select(Run).order_by(Run.created_at.desc()).limit(1000))).scalars().all()
+        stmt = select(Run).order_by(Run.created_at.desc()).limit(1000)
+        if profile and profile != "all":
+            stmt = stmt.where(runs_of_profile_clause(profile))
+        rows = (await s.execute(stmt)).scalars().all()
     out = []
     for r in rows:
         if q and q.lower() not in json.dumps(r.prospect).lower():
@@ -208,10 +192,14 @@ async def list_runs(q: str | None = None, status: str | None = None, route: str 
 
 
 @router.get("/metrics", dependencies=auth)
-async def metrics():
+async def metrics(profile: str | None = None):
     async with session() as s:
-        runs = (await s.execute(select(Run))).scalars().all()
-        reviews = (await s.execute(select(Review))).scalars().all()
+        stmt = select(Run)
+        if profile and profile != "all":
+            stmt = stmt.where(runs_of_profile_clause(profile))
+        runs = (await s.execute(stmt)).scalars().all()
+        ids = {r.id for r in runs}
+        reviews = [v for v in (await s.execute(select(Review))).scalars().all() if v.run_id in ids]
     n = len(runs)
     reviewed = [r for r in runs if r.outcome in ("approved", "approved_with_edits", "rejected")]
     approved = [r for r in runs if r.outcome in ("approved", "approved_with_edits")]
@@ -228,6 +216,7 @@ async def metrics():
     for r in runs:
         statuses[r.status] = statuses.get(r.status, 0) + 1
     durs = sorted(r.active_ms for r in finished if r.active_ms)
+    budget_ms = int(get_settings().run_budget_s * 1000)
     return {
         "runs": n, "statuses": statuses,
         "approval_rate": round(len(approved) / len(reviewed), 3) if reviewed else None,
@@ -237,6 +226,13 @@ async def metrics():
         "failed": sum(1 for r in runs if r.status == "failed"),
         "edge_cases": edge, "routes": routes,
         "median_duration_ms": durs[len(durs) // 2] if durs else None,
+        "avg_duration_ms": int(sum(durs) / len(durs)) if durs else None,
+        "p90_duration_ms": durs[min(len(durs) - 1, int(len(durs) * 0.9))] if durs else None,
+        "within_budget_rate": round(sum(1 for d in durs if d <= budget_ms) / len(durs), 3) if durs else None,
+        "budget_s": get_settings().run_budget_s,
+        "cancelled": sum(1 for r in runs if r.status == "cancelled" or (r.interrupted or {}).get("reason") == "user"),
+        "timed_out": sum(1 for r in runs if r.status == "timed_out"
+                         or (r.interrupted or {}).get("reason") == "timeout"),
         "total_cost_usd": round(sum(r.cost_usd for r in runs), 4),
         "avg_cost_usd": round(sum(r.cost_usd for r in runs) / n, 4) if n else None,
         "regenerations": sum(1 for rv in reviews if rv.action == "regenerate"),
@@ -336,6 +332,16 @@ async def decide(run_id: str, body: DecisionIn):
         kind = r.pause["kind"]
         cands = {c["id"]: c for c in r.pause.get("candidates", [])}
         d: dict = {"kind": kind, "choice": body.choice, "at": utcnow().isoformat()}
+        if body.choice == "pick_company":
+            if kind != "ambiguous_company" or body.candidate_id not in cands:
+                raise HTTPException(400, "Pick one of the listed companies.")
+            d["company"] = cands[body.candidate_id]
+            ident = dict(r.identity or {})
+            comp = dict(ident.get("company") or {})
+            comp.update(status="found", chosen=body.candidate_id,
+                        reasons=list(comp.get("reasons", [])) + ["Company chosen by the rep."])
+            ident["company"] = comp
+            r.identity = ident
         if body.choice == "pick":
             if kind != "ambiguous" or body.candidate_id not in cands:
                 raise HTTPException(400, "Pick one of the listed candidates.")
@@ -395,6 +401,10 @@ async def review(run_id: str, body: ReviewIn):
             rv.note = (body.note or "") + (" | lint: " + "; ".join(lint_draft(*_split(current))["issues"])
                                            if not lint_draft(*_split(current))["ok"] else "")
         elif body.action == "approve":
+            incomplete = d.verification is None or bool((r.interrupted or {}).get("incomplete"))
+            if incomplete and not body.acknowledged_incomplete:
+                raise HTTPException(400, "This draft was not fully checked (the run was stopped or hit the time "
+                                         "limit). Tick the acknowledgement before approving.")
             if needs_ack and not body.acknowledged_sensitive:
                 raise HTTPException(400, "This draft touches a sensitive situation. Tick the acknowledgement "
                                          "before approving.")
@@ -440,13 +450,14 @@ async def retry(run_id: str, body: RetryIn, request: Request):
         r = await s.get(Run, run_id)
         if r is None:
             raise HTTPException(404, "Run not found")
-        if r.status != "failed":
-            raise HTTPException(409, "Only failed runs can be retried.")
+        if r.status not in ("failed", "timed_out", "cancelled"):
+            raise HTTPException(409, "Only failed, stopped or timed-out runs can be retried.")
         if body.mode == "replay" and not await _has_saved(r.prospect["name"], r.prospect["company"]):
             raise HTTPException(400, "No saved sources for this prospect - replay is not possible.")
         if body.mode:
             r.mode = body.mode
         r.status, r.outcome, r.error, r.finished_at = "queued", None, None, None
+        r.cancel_requested, r.interrupted = False, None
         await s.commit()
     await emit(run_id, "run_status", {"status": "queued", "retry": True})
     await enqueue(run_id, "retry")
@@ -485,3 +496,61 @@ async def export_fixture(run_id: str):
                      "generic": (last.genericness or {}).get("generic") if last else None},
         "search": search, "llm": llm,
     }
+
+
+# --------------------------------------------------------------------------- stop / run again
+@router.post("/runs/{run_id}/cancel", dependencies=auth)
+async def cancel_run(run_id: str):
+    """Stop a run. Idempotent; safe to call repeatedly or after the run has already finished."""
+    from .pipeline.runner import RUNNING, finalize_without_job
+
+    async with session() as s:
+        r = await s.get(Run, run_id)
+        if r is None:
+            raise HTTPException(404, "Run not found")
+        status = r.status
+        if status in ("completed", "failed", "cancelled", "timed_out"):
+            return {"ok": True, "status": status, "already_finished": True}
+        if status == "awaiting_review":
+            raise HTTPException(409, "Nothing is running - the draft is waiting for review. Use Reject to "
+                                     "discard it.")
+        r.cancel_requested = True
+        if status == "queued":
+            await s.execute(update(Job).where(Job.run_id == run_id, Job.status == "queued")
+                            .values(status="cancelled", finished_at=utcnow()))
+        await s.commit()
+    await emit(run_id, "cancel_requested", {})
+    ctx = RUNNING.get(run_id)
+    if ctx is not None:
+        ctx.interrupt("user")          # cancels the running task now; it finalises itself
+        return {"ok": True, "status": "cancelling"}
+    if status in ("queued", "awaiting_rep"):
+        await finalize_without_job(run_id, "user")
+        return {"ok": True, "status": "cancelled"}
+    # running in another worker process: it sees cancel_requested within ~1 s
+    return {"ok": True, "status": "cancelling"}
+
+
+@router.post("/runs/{run_id}/rerun", dependencies=auth)
+async def rerun(run_id: str, request: Request):
+    """Start a fresh run with the same prospect and the same seller profile (if it still exists)."""
+    async with session() as s:
+        r = await s.get(Run, run_id)
+    if r is None:
+        raise HTTPException(404, "Run not found")
+    cid = client_id(request)
+    await check_run_budget(cid)
+    async with session() as s:
+        prof = await s.get(SellerProfile, r.seller_profile_id or "default")
+    if prof is None:
+        prof = await resolve_profile(request)
+    async with session() as s:
+        new = Run(prospect=dict(r.prospect), seller_profile=dict(prof.data), seller_profile_id=prof.id,
+                  mode="live", scenario_key=r.scenario_key, client_id=cid, status="queued")
+        s.add(new)
+        await s.commit()
+        rid = new.id
+    await init_stages(rid)
+    await emit(rid, "run_status", {"status": "queued"})
+    await enqueue(rid, "start")
+    return {"id": rid}

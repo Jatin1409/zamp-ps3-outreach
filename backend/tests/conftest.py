@@ -26,6 +26,7 @@ async def db(tmp_path, monkeypatch):
     get_settings.cache_clear()
     dbm.init_engine()
     await dbm.create_all()
+    await dbm.migrate()
     from app.seed import ensure_seed
     await ensure_seed()
     yield dbm

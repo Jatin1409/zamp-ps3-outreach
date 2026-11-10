@@ -61,6 +61,38 @@ async def create_all():
         await conn.run_sync(Base.metadata.create_all)
 
 
+# Columns added after the first deployment. create_all() never alters existing tables, so they are added here,
+# idempotently, on every boot. Old rows get NULL, which every reader treats as the previous behaviour.
+_ADDED_COLUMNS = [
+    ("runs", "seller_profile_id", "VARCHAR(32)"),
+    ("runs", "cancel_requested", "BOOLEAN DEFAULT FALSE"),
+    ("runs", "interrupted", "JSON"),
+    ("search_records", "qkey", "VARCHAR(700)"),
+    ("seller_profiles", "created_at", "TIMESTAMP WITH TIME ZONE"),
+]
+_ADDED_INDEXES = [
+    ("ix_runs_seller_profile_id", "runs", "seller_profile_id"),
+    ("ix_search_records_qkey", "search_records", "qkey"),
+]
+
+
+async def migrate():
+    from sqlalchemy import text
+
+    async with engine().begin() as conn:
+        dialect = conn.dialect.name
+        for table, col, typ in _ADDED_COLUMNS:
+            if dialect == "postgresql":
+                await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {typ}"))
+            else:
+                cols = {r[1] for r in (await conn.execute(text(f"PRAGMA table_info({table})"))).fetchall()}
+                if col not in cols:
+                    await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} "
+                                            f"{typ.replace(' WITH TIME ZONE', '')}"))
+        for name, table, col in _ADDED_INDEXES:
+            await conn.execute(text(f"CREATE INDEX IF NOT EXISTS {name} ON {table} ({col})"))
+
+
 async def get_session() -> AsyncIterator[AsyncSession]:
     async with session() as s:
         yield s

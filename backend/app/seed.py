@@ -36,7 +36,7 @@ async def ensure_seed():
     async with session() as s:
         row = (await s.execute(select(SellerProfile).limit(1))).scalars().first()
         if row is None:
-            s.add(SellerProfile(id="default", name="Ledgerline", data=LEDGERLINE))
+            s.add(SellerProfile(id="default", name="Ledgerline", data=dict(LEDGERLINE)))
             await s.commit()
 
 

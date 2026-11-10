@@ -24,11 +24,29 @@ class Candidate(Strict):
     role_matches_input: Literal["yes", "no", "unknown"]
     distinguisher: str = Field(description="What distinguishes this person from others with the same name "
                                            "(team, location, prior company) - professional facts only")
+    is_fictional: bool = Field(default=False, description="True only if the sources describe this as a fictional "
+                                                          "character (film, TV, book, game, comic), not a real person")
+    fiction_source: str = Field(default="", description="The work of fiction it comes from, if fictional; else ''")
+    evidence: list[Evidence]
+
+
+class CompanyFinding(Strict):
+    name: str = Field(description="Company name as the sources write it")
+    what_it_does: str = Field(description="One short phrase, from the sources (e.g. 'fire-fighting vehicle "
+                                          "maker'); '' if unknown")
+    short_label: str = Field(description="2-4 words that tell it apart from same-named companies "
+                                         "(e.g. 'fintech bank, San Francisco')")
+    is_fictional: bool = Field(description="True only if the sources describe it as a fictional company from a "
+                                           "film, TV show, book or game")
+    fiction_source: str = Field(description="The work of fiction, if fictional; else ''")
     evidence: list[Evidence]
 
 
 class IdentityExtraction(Strict):
     candidates: list[Candidate]
+    companies: list[CompanyFinding] | None = Field(
+        default=None, description="Distinct organisations in the sources whose name matches the company the rep "
+                                  "entered (real or fictional). Empty list if none.")
     conflicting_sources: bool = Field(description="True if sources disagree about who this is or where they work")
     summary: str
 

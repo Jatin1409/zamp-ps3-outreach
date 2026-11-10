@@ -1,6 +1,7 @@
 """The nine pipeline stages. Each one: reads state, does its work through RunContext, writes results."""
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import re
 from dataclasses import asdict
@@ -9,15 +10,18 @@ from urllib.parse import urlparse, urlunparse
 from rapidfuzz import fuzz
 from sqlalchemy import delete, select
 
+from ..config import get_settings
 from ..db import session
 from ..models import Draft, Run, Signal
+from ..providers.llm import LLMError
 from ..providers.search import SearchQuery, SearchResult
 from . import prompts as P
 from .context import RunContext, StageFailed, StageHandle, add_warning, update_run
 from .injection import detect_injection
 from .lint import lint_draft
-from .llm_schemas import ClaimBatch, DraftOut, FilterBatch, GenericnessOut, IdentityExtraction, RankBatch
-from .routing import (DO_NOT_DRAFT, CandidateView, RouteDecision, SignalView, decide_identity, decide_route)
+from .llm_schemas import ClaimBatch, DraftOut, FilterBatch, GenericnessOut, RankBatch
+from .identity import stage_identity  # noqa: F401  (re-exported for the runner)
+from .routing import DO_NOT_DRAFT, RouteDecision, SignalView, decide_route
 from .scoring import STALE_DAYS, age_days, domain_of, explain_ranking, score_signal
 from .textmatch import normalize, quote_in_text, redact_personal
 
@@ -71,84 +75,7 @@ def name_terms(name: str) -> list[str]:
     return [name.strip()] + ([parts[-1]] if len(parts) > 1 else [])
 
 
-# =========================================================================== 1. identity
-async def stage_identity(ctx: RunContext, run: Run) -> dict:
-    p = run.prospect
-    async with ctx.stage("identity", {"prospect": p}) as h:
-        queries = [SearchQuery(f'"{p["name"]}" "{p["company"]}"', max_results=6)]
-        if p.get("role"):
-            queries.append(SearchQuery(f'"{p["name"]}" {p["role"]} {p["company"]}', max_results=5))
-        queries.append(SearchQuery(f'"{p["name"]}" {p.get("role") or ""} joins OR appointed OR former'
-                                   .replace("  ", " "), max_results=5))
-        sources: list[dict] = []
-        seen: set[str] = set()
-        for q in queries:
-            await h.progress(f"Searching: {q.query}")
-            for r in await ctx.search_call(h, q):
-                cu = canonical_url(r.url)
-                if cu in seen or blocked(r.url):
-                    continue
-                seen.add(cu)
-                sources.append({"id": str(len(sources)), "url": r.url, "title": r.title,
-                                "published": r.published_date, "text": focus_text(r, name_terms(p["name"])),
-                                "_full": full_text(r)})
-        h.output["sources"] = [{k: v for k, v in s.items() if k != "_full"} for s in sources]
-        clean = [s for s in sources if not detect_injection(s["_full"])]
-        quarantined = [s["url"] for s in sources if s not in clean]
-        if quarantined:
-            h.output["quarantined"] = quarantined
-        if not clean:
-            ext = IdentityExtraction(candidates=[], conflicting_sources=False, summary="No sources found.")
-        else:
-            await h.progress(f"Reading {len(clean)} sources to identify candidates")
-            res = await ctx.llm_call(h, purpose="identity", system=P.IDENTITY_SYSTEM,
-                                     user=P.identity_user(p, clean), schema=IdentityExtraction, tier="fast")
-            ext = res.data
-        # verify evidence quotes in code
-        by_idx = {s["id"]: s for s in clean}
-        views, cand_out = [], []
-        for i, c in enumerate(ext.candidates):
-            verified_urls, ev_out = set(), []
-            for ev in c.evidence:
-                src = by_idx.get(str(ev.source))
-                ok = bool(src) and quote_in_text(ev.quote, src["_full"])[0]
-                if ok:
-                    verified_urls.add(canonical_url(src["url"]))
-                ev_out.append({"quote": ev.quote, "url": src["url"] if src else None,
-                               "title": src["title"] if src else None,
-                               "published": src.get("published") if src else None, "verified": ok})
-            name_ok = fuzz.token_set_ratio(normalize(c.full_name), normalize(p["name"])) >= 85
-            cid = f"c{i + 1}"
-            at_input, note = c.at_input_company, None
-            company_ok = not c.current_company or fuzz.token_set_ratio(
-                normalize(c.current_company), normalize(p["company"])) >= 80
-            if at_input == "current" and not company_ok:
-                # model output contradicts itself ("current at X" but current_company = Y): trust neither
-                at_input = "unclear"
-                note = (f"Sources were read as both 'currently at {p['company']}' and 'currently at "
-                        f"{c.current_company}' - treated as unclear.")
-            views.append(CandidateView(cid, c.full_name, c.current_company, c.current_role, at_input,
-                                       c.role_matches_input, len(verified_urls), name_ok))
-            cand_out.append({"id": cid, **c.model_dump(exclude={"evidence"}), "at_input_company": at_input,
-                             "evidence": ev_out, "verified_sources": len(verified_urls), "name_matches": name_ok,
-                             "consistency_note": note})
-        dec = decide_identity(views, bool(p.get("role")), ext.conflicting_sources)
-        dec.reasons.extend(c["consistency_note"] for c in cand_out
-                           if c["consistency_note"] and c["id"] == dec.chosen)
-        identity = {**asdict(dec), "candidate_details": cand_out, "summary": ext.summary,
-                    "searched": [q.query for q in queries]}
-        h.output.update({"decision": asdict(dec), "candidates": cand_out})
-        chosen = next((c for c in cand_out if c["id"] == dec.chosen), None)
-        h.explanation = {
-            "resolved": f"Confirmed {chosen['full_name'] if chosen else p['name']} at {p['company']}"
-                        f" ({dec.confidence} confidence). " + " ".join(dec.reasons[-2:]),
-            "ambiguous": "Found more than one plausible person. Pausing so you can choose the right one.",
-            "role_conflict": "Sources suggest this person's company or role has changed. Pausing for your decision.",
-            "not_found": "Could not find this person in public sources. Continuing with company-level research; "
-                         "personalisation will be limited.",
-        }[dec.status]
-    await update_run(run.id, identity=identity)
-    return identity
+# =========================================================================== 1. identity -> identity.py
 
 
 # =========================================================================== 2. gather
@@ -165,6 +92,10 @@ def effective_prospect(run: Run) -> dict:
             if c.get("current_company") and c.get("at_input_company") in ("former", "never"):
                 p["company"] = c["current_company"]
             p["distinguisher"] = c.get("distinguisher")
+        if d.get("kind") == "ambiguous_company" and d.get("company"):
+            co = d["company"]
+            p["company_label"] = co.get("short_label") or co.get("what_it_does") or None
+            p["company_what"] = co.get("what_it_does")
     return p
 
 
@@ -175,21 +106,22 @@ async def stage_gather(ctx: RunContext, run: Run) -> list[dict]:
             await s.execute(delete(Signal).where(Signal.run_id == run.id))
             await s.commit()
         name, company = p["name"], p["company"]
+        co = f'"{company}" {p["company_label"]}' if p.get("company_label") else f'"{company}"'
         queries = [
             ("person", SearchQuery(f'"{name}" {company} interview OR podcast OR keynote OR said', max_results=6)),
             ("person", SearchQuery(f'"{name}" {company}', max_results=6, time_range="year")),
-            ("company", SearchQuery(f'"{company}" funding OR raises OR acquisition OR expansion', topic="news",
+            ("company", SearchQuery(f'{co} funding OR raises OR acquisition OR expansion', topic="news",
                                     max_results=6, time_range="year")),
-            ("company", SearchQuery(f'"{company}" hiring OR launches OR partnership OR announces', topic="news",
+            ("company", SearchQuery(f'{co} hiring OR launches OR partnership OR announces', topic="news",
                                     max_results=6, time_range="year")),
-            ("company", SearchQuery(f'"{company}" finance OR CFO OR "accounts payable" OR invoices', max_results=5,
+            ("company", SearchQuery(f'{co} finance OR CFO OR "accounts payable" OR invoices', max_results=5,
                                     time_range="year")),
         ]
         rows: list[Signal] = []
         n = 0
-        for scope, q in queries:
-            await h.progress(f"Searching ({scope}): {q.query}")
-            for r in await ctx.search_call(h, q):
+        results = await ctx.search_many(h, [q for _, q in queries])
+        for (scope, q), rs in zip(queries, results):
+            for r in rs:
                 if blocked(r.url):
                     continue
                 n += 1
@@ -233,11 +165,15 @@ async def judge_in_batches(ctx: RunContext, h: StageHandle, *, purpose: str, sys
         if not todo:
             break
         if attempt:
+            if not ctx.can_afford(8):
+                await h.progress(f"{len(todo)} item(s) left unscored to stay within the time limit")
+                break
             await h.progress(f"The model skipped {len(todo)} item(s); asking again for just those")
-        for i in range(0, len(todo), batch_size):
-            batch = todo[i:i + batch_size]
-            res = await ctx.llm_call(h, purpose=purpose, system=system, user=make_user(batch), schema=schema,
-                                     tier="fast")
+        batches = [todo[i:i + batch_size] for i in range(0, len(todo), batch_size)]
+        # independent batches run concurrently (they were sequential: 2-3 x 5-10 s)
+        results = await asyncio.gather(*(ctx.llm_call(h, purpose=purpose, system=system, user=make_user(b),
+                                                       schema=schema, tier="fast") for b in batches))
+        for batch, res in zip(batches, results):
             asked = {it["id"] for it in batch}
             for j in res.data.judgments:
                 if j.sid in asked and j.sid not in got:
@@ -418,11 +354,36 @@ async def stage_route(ctx: RunContext, run: Run) -> RouteDecision:
         edge.append("thin_signal")
     if dec.sensitive_mode != "none" and "sensitive_signal" not in edge:
         edge.append("sensitive_signal")
+    # complete the "what could / couldn't be verified" checklist with what the research found
+    usable = [x for x in sigs if x.scores.get("eligible")]
+    person_n = sum(1 for x in usable if x.about == "person")
+    company_n = sum(1 for x in usable if x.about == "company")
+    checks = [c for c in ident.get("checks", []) if c.get("key") not in ("person_signal", "company_news")]
+    checks += [
+        {"key": "person_signal", "label": "Something recent and specific about the person",
+         "status": "verified" if person_n else "not_verified",
+         "detail": f"{person_n} usable item(s)." if person_n else "Nothing usable: no interviews, posts or talks found."},
+        {"key": "company_news", "label": "Recent company news",
+         "status": "verified" if company_n else "not_verified",
+         "detail": f"{company_n} usable item(s)." if company_n else "No usable, credible company news found."},
+    ]
     await update_run(run.id, route_path=list(run.route_path or []) + [dec.route], final_route=dec.route,
                      route_reason=f"{dec.rule}: {dec.reason}", personalisation=dec.personalisation,
-                     edge_cases=edge)
+                     edge_cases=edge, identity={**ident, "checks": checks} if ident else ident)
     for w in dec.warnings:
         await add_warning(run.id, w)
+    return dec
+
+
+async def stage_route_fixed(ctx: RunContext, run: Run, rule: str, reason: str, missing: list[str], edge: str):
+    """Route decided at the identity gate (fictional / nothing found): recorded like any other route."""
+    async with ctx.stage("route") as h:
+        dec = RouteDecision(DO_NOT_DRAFT, rule, reason, None, "none", missing=[m for m in missing if m])
+        h.output = asdict(dec)
+        h.explanation = f"Rule {rule}: {reason}"
+    await update_run(run.id, route_path=list(run.route_path or []) + [DO_NOT_DRAFT], final_route=DO_NOT_DRAFT,
+                     route_reason=f"{rule}: {reason}", personalisation="none",
+                     edge_cases=list(dict.fromkeys(list(run.edge_cases or []) + [edge])))
     return dec
 
 
@@ -473,6 +434,8 @@ async def stage_draft(ctx: RunContext, run: Run, route: dict, origin: str = "gen
             lint = lint_draft(out.subject, out.body)
             if lint["ok"]:
                 break
+            if not ctx.can_afford(get_settings().min_s_for_rewrite):
+                break  # keep the draft; the style issues are reported as a warning instead
             fb = lint["issues"]
         version = await _next_version(run.id)
         d = Draft(run_id=run.id, version=version, origin=origin, subject=out.subject.strip(), body=out.body.strip(),
@@ -511,7 +474,7 @@ async def check_claims(ctx: RunContext, h: StageHandle, run: Run, draft: dict) -
                 "text": (x.judgments or {}).get("key_fact", "") + "\n" + x.text[:6000]} for x in kept.values()
                if x.scores]
     res = await ctx.llm_call(h, purpose="verify", system=P.VERIFY_SYSTEM,
-                             user=P.verify_user(draft, sources, run.seller_profile), schema=ClaimBatch, tier="draft")
+                             user=P.verify_user(draft, sources, run.seller_profile), schema=ClaimBatch, tier="verify")
     out = []
     for c in res.data.claims:
         item = c.model_dump()
@@ -548,6 +511,7 @@ async def stage_verify(ctx: RunContext, run: Run, route: dict, draft: Draft) -> 
     async with ctx.stage("verify", {"draft_id": draft.id}) as h:
         rounds = []
         current = draft
+        skipped_for_time = False
         for rnd in range(3):  # initial check + up to 2 rewrites
             await h.progress("Checking each claim against stored sources" if rnd == 0
                              else f"Re-verifying rewrite {rnd}")
@@ -562,6 +526,10 @@ async def stage_verify(ctx: RunContext, run: Run, route: dict, draft: Draft) -> 
                 await s.commit()
             current.verification = ver
             if not bad or rnd == 2:
+                break
+            if not ctx.can_afford(get_settings().min_s_for_rewrite):
+                skipped_for_time = True
+                await h.progress("Not enough time left for a rewrite; flagging the unsupported claims instead")
                 break
             await h.progress(f"{len(bad)} unsupported claim(s); rewriting (round {rnd + 1} of 2)")
             hook, support = await _hook_and_support(run, route)
@@ -588,7 +556,9 @@ async def stage_verify(ctx: RunContext, run: Run, route: dict, draft: Draft) -> 
                     "factual_claims": n_fact}
         if ver["unsupported"]:
             h.explanation = (f"{ver['unsupported']} claim(s) still could not be traced to a source after "
-                             f"{len(rounds) - 1} rewrite(s). Sent to review with a warning.")
+                             f"{len(rounds) - 1} rewrite(s)"
+                             + (" (no time left for another rewrite within the 90-second limit)"
+                                if skipped_for_time else "") + ". Sent to review with a warning.")
         else:
             h.explanation = (f"All {n_fact} factual claims trace to stored sources"
                              + (f" after {len(rounds) - 1} rewrite(s)." if len(rounds) > 1 else "."))
@@ -607,16 +577,37 @@ def mask(text: str, prospect: dict) -> str:
     return out
 
 
-async def stage_generic(ctx: RunContext, run: Run, draft: Draft) -> dict:
-    p = effective_prospect(run)
+def swap_test_input(run: Run, draft: Draft) -> str:
+    return mask(f"Subject: {draft.subject}\n\n{draft.body}", effective_prospect(run))
+
+
+def start_swap_test(ctx: RunContext, run: Run, draft: Draft) -> asyncio.Task:
+    """Started as soon as a draft exists, so it runs while claims are being verified."""
+    t = asyncio.create_task(ctx.llm_raw(purpose="generic", system=P.GENERIC_SYSTEM,
+                                        user=P.generic_user(swap_test_input(run, draft)),
+                                        schema=GenericnessOut, tier="fast"))
+    t.add_done_callback(lambda x: x.cancelled() or x.exception())  # result may be discarded; never warn
+    return t
+
+
+async def stage_generic(ctx: RunContext, run: Run, draft: Draft, pre: asyncio.Task | None = None) -> dict:
     async with ctx.stage("generic", {"draft_id": draft.id}) as h:
         claims = (draft.verification or {}).get("claims", [])
         specific_facts = [c for c in claims if c["kind"] in ("prospect_fact", "company_fact") and c["supported"]
                           and c.get("source_type") == "signal"]
-        masked = mask(f"Subject: {draft.subject}\n\n{draft.body}", p)
-        await h.progress("Swap test: would this email still work for two unrelated prospects?")
-        res = await ctx.llm_call(h, purpose="generic", system=P.GENERIC_SYSTEM, user=P.generic_user(masked),
-                                 schema=GenericnessOut, tier="fast")
+        masked = swap_test_input(run, draft)
+        res = None
+        if pre is not None:
+            try:
+                res, _ = await pre
+                await ctx.account(h, "generic", res)
+                h.meta["ran_in_parallel_with_verify"] = True
+            except LLMError:
+                res = None  # fall back to a normal call below
+        if res is None:
+            await h.progress("Swap test: would this email still work for two unrelated prospects?")
+            res = await ctx.llm_call(h, purpose="generic", system=P.GENERIC_SYSTEM, user=P.generic_user(masked),
+                                     schema=GenericnessOut, tier="fast")
         fits = [d.model_dump() for d in res.data.decoys]
         llm_generic = any(d["still_makes_sense"] for d in fits)
         generic = llm_generic or not specific_facts
@@ -640,17 +631,33 @@ async def stage_generic(ctx: RunContext, run: Run, draft: Draft) -> dict:
 
 
 # =========================================================================== orchestration helpers
+async def _verify_then_generic(ctx: RunContext, run: Run, route: dict, d: Draft) -> tuple[Draft, dict]:
+    swap = start_swap_test(ctx, run, d)  # runs concurrently with claim verification
+    try:
+        final, _ = await stage_verify(ctx, run, route, d)
+    except BaseException:
+        swap.cancel()
+        raise
+    if final.id != d.id:  # the draft was rewritten: the early swap test is about the old text
+        swap.cancel()
+        swap = None
+    g = await stage_generic(ctx, run, final, pre=swap)
+    return final, g
+
+
 async def draft_verify_generic(ctx: RunContext, run: Run, route: dict, origin: str = "generated",
                                instruction: str | None = None) -> Draft:
     d = await stage_draft(ctx, run, route, origin=origin, instruction=instruction)
-    d, _ = await stage_verify(ctx, run, route, d)
-    g = await stage_generic(ctx, run, d)
+    d, g = await _verify_then_generic(ctx, run, route, d)
     if g["generic"]:
+        if not ctx.can_afford(get_settings().min_s_for_regenerate):
+            await add_warning(run.id, "Draft reads as generic; not regenerated because it could not finish within "
+                                      "the 90-second limit. Use Regenerate if you want another version.")
+            return d
         fb = ["The previous draft was too generic: " + " ".join(g["reasons"]),
               "Anchor the first sentence on the specific fact in the HOOK source and connect it to one problem."]
         d = await stage_draft(ctx, run, route, origin="genericness_retry", feedback=fb, instruction=instruction)
-        d, _ = await stage_verify(ctx, run, route, d)
-        g = await stage_generic(ctx, run, d)
+        d, g = await _verify_then_generic(ctx, run, route, d)
         if g["generic"]:
             await add_warning(run.id, "Draft still reads as generic after one regeneration.")
     return d

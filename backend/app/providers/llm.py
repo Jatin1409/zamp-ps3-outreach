@@ -42,7 +42,10 @@ class LLMProvider(Protocol):
     name: str
 
     async def complete(self, *, purpose: str, system: str, user: str, schema: type[T],
-                       tier: str = "fast", max_tokens: int = 8000) -> LLMResult: ...
+                       tier: str = "fast", max_tokens: int = 8000, timeout: float | None = None) -> LLMResult:
+        """tier: fast (classification) | draft (writing) | verify (draft models, low effort).
+        timeout: seconds this call may take in total, including any fallbacks (from the run's time budget)."""
+        ...
 
 
 # ---------------------------------------------------------------------------
@@ -60,10 +63,12 @@ class AnthropicLLM:
                                                max_retries=s.provider_retries)
         self.settings = s
 
-    async def complete(self, *, purpose, system, user, schema, tier="fast", max_tokens=8000) -> LLMResult:
+    async def complete(self, *, purpose, system, user, schema, tier="fast", max_tokens=8000,
+                       timeout=None) -> LLMResult:
         s = self.settings
         model = s.llm_model_fast if tier == "fast" else s.llm_model
-        effort = s.llm_effort_fast if tier == "fast" else s.llm_effort_draft
+        effort = s.llm_effort_draft if tier == "draft" else s.llm_effort_fast
+        client = self.client.with_options(timeout=max(3.0, timeout)) if timeout else self.client
         a = self._anthropic
         messages: list[dict[str, Any]] = [{"role": "user", "content": user}]
         t0 = time.monotonic()
@@ -71,7 +76,7 @@ class AnthropicLLM:
         last_err: str = ""
         for attempt in range(1, 3):  # one schema-repair retry on top of SDK transport retries
             try:
-                resp = await self.client.messages.parse(
+                resp = await client.messages.parse(
                     model=model, max_tokens=max_tokens, system=system, messages=messages,
                     output_format=schema, output_config={"effort": effort},
                 )
@@ -122,9 +127,15 @@ class FixtureLLM:
         self.responses: dict[str, list[dict]] = {k: list(v) for k, v in fixture.get("llm", {}).items()}
         self.calls: list[str] = []
         self.fail_purposes: set[str] = set(fixture.get("fail_llm", []))
+        self.delays: dict[str, float] = fixture.get("llm_delay_s", {})  # simulated latency per purpose
 
-    async def complete(self, *, purpose, system, user, schema, tier="fast", max_tokens=8000) -> LLMResult:
-        await asyncio.sleep(0)
+    async def complete(self, *, purpose, system, user, schema, tier="fast", max_tokens=8000,
+                       timeout=None) -> LLMResult:
+        delay = float(self.delays.get(purpose, self.delays.get("*", 0)))
+        if timeout is not None and delay > timeout:
+            await asyncio.sleep(max(0.0, timeout))
+            raise LLMError(f"Simulated timeout for {purpose}", kind="timeout")
+        await asyncio.sleep(delay)
         self.calls.append(purpose)
         if purpose in self.fail_purposes:
             raise LLMError(f"Simulated provider failure for {purpose}", kind="provider_error")
