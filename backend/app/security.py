@@ -4,6 +4,8 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import hmac
+import re
+import unicodedata
 
 from fastapi import Header, HTTPException, Query, Request
 from sqlalchemy import func, select
@@ -13,9 +15,24 @@ from .db import session, utcnow
 from .models import Run
 
 
+_INVISIBLE = re.compile(r"[\s\u200b-\u200f\u2060\ufeff]")
+_DASHES = re.compile(r"[\u2010-\u2015\u2212\ufe58\ufe63\uff0d_]")
+_LOOKALIKE = str.maketrans({"i": "1", "l": "1", "o": "0"})
+
+
+def normalize_code(code: str) -> str:
+    """Forgiving comparison for a code people retype or paste from chat apps: ignore case, spaces and invisible
+    characters, treat any dash as "-", and treat look-alikes (I / l / 1, O / 0) as the same character.
+    (Reported: the correct code was rejected - it contains both "I" and "l", and phones capitalise the first letter.)"""
+    c = unicodedata.normalize("NFKC", code or "")
+    c = _DASHES.sub("-", _INVISIBLE.sub("", c)).casefold()
+    return c.translate(_LOOKALIKE)
+
+
 def _ok(code: str | None) -> bool:
-    expected = get_settings().access_code
-    return bool(code) and hmac.compare_digest(code.encode(), expected.encode())
+    expected = normalize_code(get_settings().access_code)
+    given = normalize_code(code or "")
+    return bool(given) and hmac.compare_digest(given.encode(), expected.encode())
 
 
 async def require_access(x_access_code: str | None = Header(default=None),

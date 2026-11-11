@@ -224,3 +224,23 @@ def test_many_unrelated_namesakes_mean_not_found_not_ambiguous():
     assert decide_identity(cands, True, False).status == "not_found"
     # a single namesake elsewhere is still offered as "has this person moved?"
     assert decide_identity(cands[:1], True, False).status == "role_conflict"
+
+
+
+@pytest.mark.parametrize("typed,ok", [
+    ("test-code", True),
+    ("Test-Code", True),          # phone auto-capitalisation
+    ("  test-code\u200b ", True), # spaces / zero-width from chat apps
+    ("test\u2013code", True),     # en dash instead of hyphen
+    ("tesT-c0de", True),          # O/0 look-alike
+    ("test-cod", False),
+    ("", False),
+])
+async def test_access_code_is_forgiving_but_still_checked(client, typed, ok):
+    r = await client.post("/api/auth/check", json={"code": typed})
+    assert (r.status_code == 200) is ok
+
+
+def test_lookalike_letters_match():
+    from app.security import normalize_code
+    assert normalize_code("ledger-AbIl0") == normalize_code("Ledger-abl1O")

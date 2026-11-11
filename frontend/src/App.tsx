@@ -17,7 +17,11 @@ function Gate({ onOk }: { onOk: () => void }) {
     e.preventDefault();
     setBusy(true); setErr(null);
     try { await post("/api/auth/check", { code: code.trim() }); setCode(code.trim()); onOk(); }
-    catch (x: any) { setErr(x.message); }
+    catch (x: any) {
+      setErr(x.status === 401 ? "That code doesn't match. Paste it exactly as shared (it isn't case-sensitive)."
+        : x.status === 0 ? x.message
+        : `The server isn't ready (${x.message}). If the app was asleep it can take ~50 s to wake - try again.`);
+    }
     finally { setBusy(false); }
   };
   return (
@@ -28,7 +32,8 @@ function Gate({ onOk }: { onOk: () => void }) {
         <p className="muted small">A working process for PS-3, <em>personalised outreach: from prospect to draft</em>.
           It runs real web searches and AI calls on limited free quotas, so it's protected. Enter the access code
           shared with the submission.</p>
-        <input className="input" autoFocus value={code} onChange={(e) => setC(e.target.value)} placeholder="Access code" aria-label="Access code" />
+        <input className="input" autoFocus value={code} onChange={(e) => setC(e.target.value)} placeholder="Access code" aria-label="Access code"
+          autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
         {err && <div className="callout bad small">{err}</div>}
         <button className="btn" disabled={!code.trim() || busy}>{busy ? "Checking…" : "Continue"} <ArrowRight size={16} className="arrow" /></button>
       </form>

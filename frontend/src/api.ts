@@ -77,7 +77,12 @@ export async function api<T = any>(path: string, opts: RequestInit = {}): Promis
     if (e?.name === "AbortError") throw e;
     throw new ApiError(0, "Can't reach the server. Check your connection and try again.");
   }
-  if (res.status === 401) { onUnauthorized(); throw new ApiError(401, "Access code required."); }
+  if (res.status === 401) {
+    let msg = "Access code required.";
+    try { const j = await res.json(); if (typeof j.detail === "string") msg = j.detail; } catch { /* not json */ }
+    if (!path.endsWith("/auth/check")) onUnauthorized();
+    throw new ApiError(401, msg);
+  }
   if (!res.ok) {
     let msg = `Request failed (${res.status})`;
     try {
