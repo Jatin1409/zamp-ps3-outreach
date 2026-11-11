@@ -215,3 +215,12 @@ def test_company_never_mentioned_is_detected_by_code():
     src = [{"_full": "Brightwater Capital announced a fund."}]
     assert not _company_mentioned("Brightwater Fasteners GmbH", src)
     assert _company_mentioned("Brightwater Capital Ltd", src)
+
+
+def test_many_unrelated_namesakes_mean_not_found_not_ambiguous():
+    from app.pipeline.routing import CandidateView, decide_identity
+    cands = [CandidateView(f"c{i}", "Tomas Lindqvist", co, "Director", "never", "no", 1, True, False)
+             for i, co in enumerate(["Qtagg", "Sealvalue", "Ams Pictures"])]
+    assert decide_identity(cands, True, False).status == "not_found"
+    # a single namesake elsewhere is still offered as "has this person moved?"
+    assert decide_identity(cands[:1], True, False).status == "role_conflict"

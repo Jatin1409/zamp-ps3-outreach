@@ -55,6 +55,14 @@ def decide_identity(cands: list[CandidateView], has_input_role: bool, conflictin
             "found at the company you entered."], chosen=f.id, candidates=[c.id for c in fictional])
     if fictional:
         reasons.append(f"Ignored a fictional character with the same name ({fictional[0].full_name}).")
+    unrelated = [c for c in plausible if c.at_input_company == "never"]
+    if len(unrelated) >= 2 and len(unrelated) == len(plausible):
+        # Several namesakes, none ever linked to the company entered (seen live: 7 unrelated "Tomas Lindqvist"s).
+        # They aren't candidates for this prospect - asking "which one?" would only offer wrong people.
+        return IdentityDecision("not_found", "low", reasons + [
+            f"Found {len(unrelated)} people with this name, but none linked to the company you entered "
+            f"({', '.join(sorted({c.current_company for c in unrelated if c.current_company})[:4])}...). "
+            "Continuing with company-level research only."])
     if not plausible:
         return IdentityDecision("not_found", "low",
                                 reasons + ["No public source links this name to this company. Continuing with "

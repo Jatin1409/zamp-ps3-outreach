@@ -270,5 +270,9 @@ Found by trying unusual inputs against the running app; each fix has a test (`te
   skipped and logged on the stage; only all searches failing fails the stage.
 - Product listings (live: "Buy Peyush Bansal Shark Tank ... Eyeglasses" ranked top) -> shopping pages are dropped in
   the filter stage by code.
+- Michael Brown at Deloitte (eval): one namesake at the firm in another role plus former namesakes was read as
+  "role changed" -> now asks which person. Tomas Lindqvist (eval): 7 namesakes never linked to the company were
+  offered as candidates -> they are not candidates; with none left the person is not found (and, the company being
+  unknown too, the run stops at "nothing found"). Code also marks a company not found when no source names it.
 - Checked and already correct: unknown ids (404), double decisions/approvals (409), regenerate twice (409), profile
   deleted while selected (falls back to default), editing a profile after a run (snapshot unchanged).
