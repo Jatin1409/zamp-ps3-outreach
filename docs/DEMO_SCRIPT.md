@@ -16,52 +16,164 @@ screen: tap **Use this code**; not case-sensitive).
 
 ---
 
-## Part 1 — 5-minute video (narration)
+## Part 1 — 5-minute video, one take (happy path + edge case)
 
-**0:00 – 0:30 · The problem and the promise** (start on the login screen, tap **Use this code**, land on
-New run)
-> "Reps either spend twenty minutes researching each prospect or send something generic. This takes a name and a
-> company, does the research in about a minute, and gives the rep a short draft built on a sourced hook. A person always approves — it can't send email at all. The seller here is Ledgerline, a fictional
-> accounts-payable automation company; you can edit its profile."
+**Format:** one continuous screen recording with your voice. No slides, no cuts. Runs are live, so some moments
+are waiting time; the narration below fills them. Lines in quotes are what you say; *italics* are what you do.
+Read it in your own words; nothing needs to be word-perfect.
 
-**0:30 – 2:15 · Happy path, live** — click **Run live** on *Happy path — Zerodha*
-(Nithin Kamath · Founder & CEO · Zerodha).
-> "Each stage appears as it runs. First it confirms who this is — the AI lists candidates with quotes, and code
-> checks every quote is really on the page. Now it's gathering signals: interviews, company news, hiring, funding…
-> filtering out duplicates, stale items, anything about someone else, and anything that looks like hidden
-> instructions to an AI. Ranking: the AI judges how specific and relevant each item is; code adds recency and source
-> credibility and computes the score — the formula is on screen. Then fixed rules choose the route: here, a normal
-> draft."
+**Before you press record (10 minutes before)**
+- Open https://outreach-desk-lmgu.onrender.com about 2 minutes early: the free host takes ~50 s to wake. Then
+  open a private/incognito window for the recording itself, so the login screen appears on camera.
+- Close other tabs and notifications. Use the browser at ~100% zoom on a laptop-sized window.
+- Don't do rehearsal runs of these two prospects in the last hour (free AI quota, and the 15-runs-per-hour limit).
+- Keep this script open on your phone or a second screen.
+- If a live run fails on camera: say "the stage shows exactly what failed - it never pretends", then click
+  **Replay** on the same sample card (re-uses saved sources, clearly labelled) and continue.
 
-When the draft appears:
-> "The hook is the highest-scoring recent signal — its key fact had to be found word-for-word in the saved source
-> before it was allowed as a hook — connected to one problem Ledgerline solves, and one low-friction ask. Then a swap
-> test: would this email still make sense for an unrelated prospect? No.
-> I'll approve — that just marks it ready to copy."
+---
 
-Click **Signals & ranking** for five seconds: "Why this signal won, and why each other one lost."
+### 0:00 – 0:30 · Who I am and what this is *(login screen)*
 
-**2:15 – 4:00 · Edge case, live** — click **Run live** on *Edge case — outdated role* (Sarah Riley · CFO · dbt Labs).
-> "I've entered her as CFO of dbt Labs. The run pauses: a September source says she left dbt Labs in May and is now at
-> Canva. It never overwrites what I typed — it shows both, with evidence, and asks me. I'll continue with the new
-> details."
+> "Hi, I'm Jatin Jain. This is my submission for Zamp's AI Solutions Analyst case study, problem statement 3:
+> personalised outreach, from prospect to draft.
+>
+> The problem: a sales rep either spends twenty minutes researching each prospect, or sends something generic.
+> This tool takes a name and a company, researches public sources, and hands the rep a short draft built on one
+> real, sourced fact - and a person always approves. It cannot send email at all."
 
-After it resumes and drafts:
-> "Second safeguard: Canva announced a 1,200-person restructuring this week. The system won't use that as a hook,
-> softens the tone, and I can't approve until I tick that I've read the context."
+*Tap **Use this code**.* You land on **New run**.
 
-**(optional, 20 s) · Stop + time limit**
-> "Every run is capped at 90 seconds - the bar in the header shows the time used - and Stop ends it at any point,
-> keeping whatever was found."
+> "The seller here is Ledgerline - a fictional accounts-payable automation company. Its profile is editable, and
+> you can keep several seller profiles; that's the switcher at the top."
 
-**4:00 – 4:45 · Dashboard**
-> "Every run: route, outcome, time, tokens. Approval rate, edit rate, and how often each edge case fires. Runs that
-> fail show as failed — a stage never pretends to succeed — and if live search is down, I can replay saved sources,
-> clearly labelled."
+---
 
-**4:45 – 5:00 · Close**
-> "The AI reads; code decides; the rep approves. Every hook is traceable to a source, and when there's nothing real to say, it
-> says so instead of inventing something."
+### 0:30 – 2:30 · Happy path *(sample card "Happy path — Zerodha's founder-CEO")*
+
+*Scroll to **Sample scenarios**. Point at the card: Nithin Kamath · Founder & CEO, Zerodha.*
+
+> "Each sample is a real public business figure, chosen to trigger one route. This one should go straight to a
+> draft. I'll run it live - real web search, real AI calls."
+
+*Click **Run live**.* The run page opens; stages appear one by one.
+
+**While it runs (~40–60 s) - narrate stage by stage as they light up:**
+
+> "In the header is the time budget: every run has a hard 90-second limit, and a Stop button.
+>
+> **Identity** first. It searches the name with the company, the role, and the company on its own. The AI lists who
+> the sources could be - but every piece of evidence has to be a quote, and *code*, not the AI, checks that the quote
+> is really on that page. Code then decides: one clear match, so it continues.
+>
+> **Gather**: interviews, talks, and company news from the last year. LinkedIn and people-data brokers are excluded at
+> the search itself - I don't scrape LinkedIn.
+>
+> **Filter**: duplicates, stale items, pages about someone else, product listings, anything personal, and anything
+> that looks like hidden instructions aimed at an AI - that's prompt-injection defence - are removed.
+>
+> **Rank**: the AI scores how specific and how relevant each item is to what Ledgerline sells, and quotes the key
+> fact. Code adds recency and source credibility and computes the score with a fixed formula.
+>
+> **Route**: plain rules, not the AI, decide what happens next. Here it's rule R7 - a strong, specific, safe signal
+> about this person - so: draft."
+
+**When the draft appears** *(the **Draft** tab opens on its own)*:
+
+> "Here's the draft. Under 120 words, one hook, one problem Ledgerline solves, and one low-friction ask. No
+> flattery, no 'hope you're well'."
+
+*Read the first line of the email aloud, then point at the hook.*
+
+> "The hook is [read the hook title]. Before an item can be used as a hook, its key fact has to be found
+> word-for-word in the saved source - so this opening line is grounded in something real, not invented.
+>
+> Then a **genericness check**: names are masked and the AI is asked whether this email would still make sense for
+> two unrelated prospects. It wouldn't - so it's specific. If it were generic, it regenerates once, then flags it."
+
+*Click **Signals & ranking** (~10 s).*
+
+> "And this is the reasoning: every signal, its score breakdown, why this one won and why each other one lost -
+> including the ones filtered out and why."
+
+*Click **Identity** (~5 s).*
+
+> "'What we could verify' - person, employer, role, company - with the evidence behind each."
+
+*Click **Draft**, then **Approve**.*
+
+> "I'm the rep, so I approve. That only marks it 'ready to copy' - nothing is ever sent. I could also edit,
+> reject, or regenerate with an instruction."
+
+---
+
+### 2:30 – 4:15 · Edge case: outdated role *(sample card "Edge case — outdated role")*
+
+*Click **New run** in the top bar, scroll to the card: Sarah Riley · CFO, dbt Labs. Click **Run live**.*
+
+> "Now an edge case. I've entered Sarah Riley as CFO of dbt Labs - the kind of stale detail that sits in every
+> CRM. Writing 'congrats on your work as CFO at dbt Labs' to someone who left would be embarrassing."
+
+**When the run pauses (~10–20 s)** - a decision panel appears:
+
+> "It stops and asks me. Sources say she has moved on - she's now at Canva. Notice what it does *not* do: it never
+> silently overwrites what I typed. It shows both versions side by side, with the evidence quotes, and makes it the
+> rep's call. Time spent waiting for me doesn't count towards the 90 seconds."
+
+*Point at the evidence quotes. Click **Continue with the new details (Canva)**.*
+
+> "I'll continue with her current role."
+
+**While it resumes (~30 s):**
+
+> "Research now follows her current company. Same stages - gather, filter, rank - and then the route rules."
+
+**When the draft appears:**
+
+> "Two things to notice. First, the draft is about her new role at Canva - not the out-of-date one I typed.
+>
+> Second, the route is 'draft with warning', rule R3. Canva announced layoffs about a week ago, and the system caught
+> that as a **sensitive signal**. It will never use layoffs as a cheerful hook - it picks a safe hook, adjusts the
+> tone, and look: Approve is disabled until I tick that I've read the sensitive context."
+
+*Point at the red/amber callout and the disabled **Approve**. Tick "I've read the sensitive context…" - Approve
+becomes active. You can leave it un-approved.*
+
+> "That's the principle throughout: the AI reads, code decides, and the rep has the final say."
+
+---
+
+### 4:15 – 4:45 · *(optional, if time allows)* A second edge case in 10 seconds *("Edge case — fictional character")*
+
+*New run → **Run live** on Tony Stark · CEO, Stark Industries. It finishes in ~10 s.*
+
+> "One more, quickly: Tony Stark at Stark Industries. It recognises a fictional character, says what's fiction and
+> what's real - there are real companies called Stark Industries - and refuses to draft. It never makes up a person."
+
+*(Other quick ones if you prefer: Michael Brown at Deloitte - several real people with that name, so it asks which;
+Tomas Lindqvist at Brightwater Fasteners - nothing exists, so it stops and lists what it checked.)*
+
+---
+
+### 4:45 – 5:00 · Close *(click **Dashboard**)*
+
+> "The dashboard tracks every run - route, outcome, time, approval and edit rates, and how often each edge case
+> fires. Failures show as failures; nothing pretends to succeed.
+>
+> To sum up: it does the research, finds one real reason to write, flags anything risky or uncertain, and leaves the
+> decision to the rep. Thanks for watching."
+
+*Stop recording.*
+
+---
+
+**If something goes differently on camera** (it's live data, so it can):
+- *The hook is a different article than you expected* → just read the hook title on screen; the narration still holds.
+- *The run shows "Draft with warning" on the happy path* → "the rules flagged something - here's the reason it gives"
+  and read the warning. That's the system working, not failing.
+- *The time bar runs out* → "the 90-second limit hit; it keeps everything it found and marks the result incomplete -
+  I can resume or run again." Then click **Run again**.
+- *Rate limit message* → you've used 15 runs this hour from your network; record later or from another network.
 
 ---
 
