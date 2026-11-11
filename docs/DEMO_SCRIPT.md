@@ -18,6 +18,8 @@ screen: tap **Use this code**; not case-sensitive).
 
 ## Part 1 — 5-minute video, one take (happy path + edge case)
 
+> The complete word-for-word version (ready to read while recording) is in [VIDEO_SCRIPT.md](VIDEO_SCRIPT.md).
+
 **Format:** one continuous screen recording with your voice. No slides, no cuts. Runs are live, so some moments
 are waiting time; the narration below fills them. Lines in quotes are what you say; *italics* are what you do.
 Read it in your own words; nothing needs to be word-perfect.

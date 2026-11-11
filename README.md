@@ -11,7 +11,7 @@ draft ready to copy.
   login screen with a one-tap "Use this code" button; not case-sensitive). Free hosting sleeps after 15 idle minutes,
   so the first load can take ~50 s.
 - **Process map:** [docs/PROCESS_MAP.md](docs/PROCESS_MAP.md) · **Decisions:** [docs/DECISIONS.md](docs/DECISIONS.md) ·
-  **Eval:** [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md) · **Demo script:** [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) ·
+  **Eval:** [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md) · **Demo script:** [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) · **Video script:** [docs/VIDEO_SCRIPT.md](docs/VIDEO_SCRIPT.md) ·
   **Interview prep:** [docs/INTERVIEW_PREP.md](docs/INTERVIEW_PREP.md)
 
 ## What it does
