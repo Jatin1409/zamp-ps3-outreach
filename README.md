@@ -7,8 +7,9 @@ picks the most relevant hook (its key fact must be a quote that code finds in th
 email, tests whether the email is generic, and hands it to the rep for review. **Nothing is ever sent** — approval only marks a
 draft ready to copy.
 
-- **Live app:** https://outreach-desk-lmgu.onrender.com (access code shared separately; free hosting sleeps after
-  15 idle minutes, so the first load can take ~50 s)
+- **Live app:** https://outreach-desk-lmgu.onrender.com — **access code: `ledger-49DlT5iIky`** (also shown on the
+  login screen with a one-tap "Use this code" button; not case-sensitive). Free hosting sleeps after 15 idle minutes,
+  so the first load can take ~50 s.
 - **Process map:** [docs/PROCESS_MAP.md](docs/PROCESS_MAP.md) · **Decisions:** [docs/DECISIONS.md](docs/DECISIONS.md) ·
   **Eval:** [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md) · **Demo script:** [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) ·
   **Interview prep:** [docs/INTERVIEW_PREP.md](docs/INTERVIEW_PREP.md)
@@ -51,7 +52,9 @@ React (Vite, TS) ──HTTP/SSE──▶ FastAPI ──▶ Postgres (runs, stage
   event streamed to the browser over Server-Sent Events (with polling fallback).
 - **Replay mode** re-uses search results saved from an earlier live run of the same prospect (labelled on screen and
   stored on the run). Live is the default; a live search failure fails the stage and offers "Retry in replay mode".
-- **Access code + rate limits** (per network per hour, global per day, concurrent runs) protect the public link.
+- **Access code + rate limits** (per network per hour, global per day, concurrent runs) protect the public link. The
+  code is public for reviewers (`SHOW_ACCESS_CODE=true` shows it on the login screen); the rate limits are what
+  protect the free quotas. Codes are compared forgivingly: case, spaces, dash variants and I/l/1, O/0 look-alikes.
 - **Speed:** searches and scoring batches run in parallel, each search has its own ~18 s cap (8 s per attempt, one quick retry) (one slow search can't hold
   the stage), model calls are hedged (a slow model is raced against the next one) behind a circuit breaker, and identical searches are cached for
   6 h. **Budget:** 90 s of active time per run, enforced on every call; optional steps only start if they can finish.
@@ -95,7 +98,7 @@ API with fixtures, Gemini provider tests with a fake client, and replays of fixt
 (`backend/fixtures/recorded/`).
 
 ```bash
-cd backend && ../.venv/Scripts/python -m scripts.eval --base https://outreach-desk-lmgu.onrender.com --code <ACCESS_CODE> --record
+cd backend && ../.venv/Scripts/python -m scripts.eval --base https://outreach-desk-lmgu.onrender.com --code ledger-49DlT5iIky --record
 ```
 
 Runs every sample scenario live, checks it took its designed route, and writes `docs/EVAL_RESULTS.md`.
@@ -114,7 +117,8 @@ Runs every sample scenario live, checks it took its designed route, and writes `
 | `TAVILY_API_KEY` | — | web search |
 | `SEARCH_COST_PER_CALL_USD` | `0` | cost shown per search (0 on Tavily free tier) |
 | `DATABASE_URL` | local SQLite | `postgresql://…` in production |
-| `ACCESS_CODE` | `local-dev` | required for every API call |
+| `ACCESS_CODE` | `local-dev` | required for every API call (deployed: `ledger-49DlT5iIky`) |
+| `SHOW_ACCESS_CODE` | `false` | `true` shows the code on the login screen (on for the deployed demo) |
 | `RUNS_PER_HOUR_PER_CLIENT` / `RUNS_PER_DAY_GLOBAL` / `MAX_CONCURRENT_RUNS` | 15 / 150 / 3 | abuse limits |
 | `WORKER_ENABLED` | `true` | set `false` and run `python -m app.worker` to split the worker out |
 | `RUN_BUDGET_S` | `90` | hard limit on active execution time per run |
@@ -142,7 +146,8 @@ or connect the GitHub app in Render to get deploy-on-push.
   key fact are still quote-checked by code, but the draft's sentences are not individually linked to sources - the rep
   reviews them against the Signals tab.
 - **Thresholds are hand-tuned** on a small set of live runs; they'd need tuning on real rep feedback.
-- **Single shared access code**, no per-user accounts.
+- **Single shared, public access code**, no per-user accounts: anyone with the link can run it, within the rate
+  limits.
 - **The 90 s budget depends on the free Gemini tier's health.** On bad days some runs reach the limit and return an
   incomplete (clearly flagged) draft; see `docs/EVAL_RESULTS.md` for measured timings.
 - **Seller profiles are shared** by everyone with the access code (no per-user ownership).
