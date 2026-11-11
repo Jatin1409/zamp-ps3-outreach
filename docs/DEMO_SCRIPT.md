@@ -1,20 +1,25 @@
 # Demo script
 
-Live app: https://outreach-desk-lmgu.onrender.com (access code shared separately).
+Live app: https://outreach-desk-lmgu.onrender.com — access code **`ledger-49DlT5iIky`** (also shown on the login
+screen: tap **Use this code**; not case-sensitive).
 
 **Before recording / before the interview (5 minutes):**
-1. Open the link ~2 minutes early — the free host sleeps after 15 idle minutes and takes ~50 s to wake.
-2. Run `python -m scripts.eval --base <url> --code <code> --only <keys>` (or click the sample scenarios once) so each
+1. Open the link ~2 minutes early — the free host sleeps after 15 idle minutes and takes ~50 s to wake. On the login
+   screen tap **Use this code** (or type `ledger-49DlT5iIky`); the browser remembers it afterwards.
+2. Run `python -m scripts.eval --base <url> --code ledger-49DlT5iIky --only <keys>` (or click the sample scenarios once) so each
    scenario has fresh saved sources — this also makes **Replay** available as a fallback for every scenario.
 3. Have the Dashboard open in a second tab.
 4. Gemini free tier allows ~20 requests/day per Flash model; the app falls back to Flash-Lite automatically
    (visible in each stage's technical details). Don't burn quota on rehearsal runs in the hour before.
+5. The code is public, so the rate limits are the real guard: 15 runs per hour per network, 150 per day in
+   total. Warm-up runs count — leave headroom for the live demo.
 
 ---
 
 ## Part 1 — 5-minute video (narration)
 
-**0:00 – 0:30 · The problem and the promise** (New run page)
+**0:00 – 0:30 · The problem and the promise** (start on the login screen, tap **Use this code**, land on
+New run)
 > "Reps either spend twenty minutes researching each prospect or send something generic. This takes a name and a
 > company, does the research in about a minute, and gives the rep a short draft built on a sourced hook. A person always approves — it can't send email at all. The seller here is Ledgerline, a fictional
 > accounts-payable automation company; you can edit its profile."
