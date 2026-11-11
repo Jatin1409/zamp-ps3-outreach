@@ -100,6 +100,13 @@ class CodeIn(BaseModel):
     code: str
 
 
+@router.get("/auth/hint")
+async def auth_hint():
+    """The code itself, only when the owner chose to make the demo open (SHOW_ACCESS_CODE=true)."""
+    s = get_settings()
+    return {"code": s.access_code if s.show_access_code else None}
+
+
 @router.post("/auth/check")
 async def auth_check(body: CodeIn):
     from .security import _ok

@@ -244,3 +244,11 @@ async def test_access_code_is_forgiving_but_still_checked(client, typed, ok):
 def test_lookalike_letters_match():
     from app.security import normalize_code
     assert normalize_code("ledger-AbIl0") == normalize_code("Ledger-abl1O")
+
+
+
+async def test_access_code_hint_only_when_enabled(client, monkeypatch):
+    from app.config import get_settings
+    assert (await client.get("/api/auth/hint")).json()["code"] is None
+    monkeypatch.setattr(get_settings(), "show_access_code", True)
+    assert (await client.get("/api/auth/hint")).json()["code"] == get_settings().access_code

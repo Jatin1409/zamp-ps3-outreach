@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { ArrowRight, Check, ChevronDown, Lock, Menu, Settings2, X } from "lucide-react";
-import { getCode, post, setCode, setUnauthorizedHandler } from "./api";
+import { api, getCode, post, setCode, setUnauthorizedHandler } from "./api";
 import NewRun from "./pages/NewRun";
 import RunView from "./pages/RunView";
 import Dashboard from "./pages/Dashboard";
@@ -13,10 +13,11 @@ function Gate({ onOk }: { onOk: () => void }) {
   const [code, setC] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const [hint, setHint] = useState<string | null>(null);
+  useEffect(() => { api<{ code: string | null }>("/api/auth/hint").then((r) => setHint(r.code)).catch(() => {}); }, []);
+  const check = async (value: string) => {
     setBusy(true); setErr(null);
-    try { await post("/api/auth/check", { code: code.trim() }); setCode(code.trim()); onOk(); }
+    try { await post("/api/auth/check", { code: value.trim() }); setCode(value.trim()); onOk(); }
     catch (x: any) {
       setErr(x.status === 401 ? "That code doesn't match. Paste it exactly as shared (it isn't case-sensitive)."
         : x.status === 0 ? x.message
@@ -24,6 +25,7 @@ function Gate({ onOk }: { onOk: () => void }) {
     }
     finally { setBusy(false); }
   };
+  const submit = (e: React.FormEvent) => { e.preventDefault(); check(code); };
   return (
     <div className="gate">
       <form className="card stack" onSubmit={submit}>
@@ -35,6 +37,16 @@ function Gate({ onOk }: { onOk: () => void }) {
         <input className="input" autoFocus value={code} onChange={(e) => setC(e.target.value)} placeholder="Access code" aria-label="Access code"
           autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} />
         {err && <div className="callout bad small">{err}</div>}
+        {hint && (
+          <div className="gate-hint">
+            <div className="small muted">Reviewer access code</div>
+            <div className="gate-hint-row">
+              <code className="gate-code">{hint}</code>
+              <button type="button" className="btn secondary sm" disabled={busy}
+                onClick={() => { setC(hint); check(hint); }}>Use this code</button>
+            </div>
+          </div>
+        )}
         <button className="btn" disabled={!code.trim() || busy}>{busy ? "Checking…" : "Continue"} <ArrowRight size={16} className="arrow" /></button>
       </form>
     </div>

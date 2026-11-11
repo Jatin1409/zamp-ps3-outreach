@@ -142,3 +142,9 @@ body { text-rendering: optimizeLegibility; }
 
 /* long unbroken names/companies must wrap, never overflow on phones */
 h1, h2, h3, .run-head .muted, .profile-meta strong, .menu-text strong, .email-body, .quote { overflow-wrap: anywhere; }
+
+/* login: optional public access code */
+.gate-hint { border: 1px dashed var(--hairline); border-radius: var(--radius-md); padding: 12px 14px; background: var(--surface); }
+.gate-hint-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; flex-wrap: wrap; }
+.gate-code { font-family: var(--font-mono); font-size: 16px; letter-spacing: .04em; user-select: all; overflow-wrap: anywhere; }
+.btn.sm { height: 34px; padding: 0 14px; font-size: 14px; }

@@ -53,6 +53,7 @@ class Settings(BaseSettings):
 
     # --- abuse protection ----------------------------------------------------
     access_code: str = "local-dev"
+    show_access_code: bool = False      # true: the login screen shows the code so anyone with the link can use it
     runs_per_hour_per_client: int = 15
     runs_per_day_global: int = 150
     max_concurrent_runs: int = 3
